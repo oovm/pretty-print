@@ -1,0 +1,23 @@
+[package]
+name = "pretty-print"
+version = "0.0.0"
+authors = ["Aster <192607617@qq.com>"]
+description = "..."
+repository = "https://github.com/oovm/pretty-print"
+documentation = "https://docs.rs/pretty-print"
+readme = "Readme.md"
+license = "MPL-2.0"
+edition = "2021"
+
+[dependencies]
+
+[dependencies.pretty]
+version = "0.12.1"
+default-features = false
+features = ["termcolor"]
+
+[dev-dependencies]
+
+[features]
+default = []
+std = []
