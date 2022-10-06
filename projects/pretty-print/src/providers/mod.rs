@@ -84,7 +84,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.keyword.clone())
+        self.text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
     pub fn identifier<'i, S>(&'a self, text: S) -> PrettyTree<'a>
@@ -100,15 +100,30 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.macros.clone())
+        self.text(text).annotate(self.macros.clone())
     }
+
     /// Allocate a document containing the given text.
-    pub fn argument<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn variable<'i, S>(&'a self, text: S, mutable: bool) -> PrettyTree<'a>
     where
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.argument.clone())
+        if mutable { self.text(text).annotate(self.local_mut.clone()) } else { self.text(text).annotate(self.local.clone()) }
+    }
+
+    /// Allocate a document containing the given text.
+    pub fn argument<'i, S>(&'a self, text: S, mutable: bool) -> PrettyTree<'a>
+    where
+        S: Into<Cow<'i, str>>,
+        'i: 'a,
+    {
+        if mutable {
+            self.text(text).annotate(self.argument_mut.clone())
+        }
+        else {
+            self.text(text).annotate(self.argument.clone())
+        }
     }
     /// Allocate a document containing the given text.
     pub fn operator<'i, S>(&'a self, text: S) -> PrettyTree<'a>
@@ -116,7 +131,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.operator.clone())
+        self.text(text).annotate(self.operator.clone())
     }
     /// Allocate a document containing the given text.
     pub fn string<'i, S>(&'a self, text: S) -> PrettyTree<'a>
@@ -124,7 +139,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.string.clone())
+        self.text(text).annotate(self.string.clone())
     }
     /// Allocate a document containing the given text.
     pub fn metadata<'i, S>(&'a self, text: S) -> PrettyTree<'a>
@@ -132,7 +147,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.macros.clone())
+        self.text(text).annotate(self.macros.clone())
     }
 
     /// Allocate a document containing the given text.
@@ -141,7 +156,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.number.clone())
+        self.text(text).annotate(self.number.clone())
     }
     /// Allocate a document containing the given text.
     pub fn structure<'i, S>(&'a self, text: S) -> PrettyTree<'a>
@@ -149,7 +164,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.structure.clone())
+        self.text(text).annotate(self.structure.clone())
     }
     /// Allocate a document containing the given text.
     pub fn interface<'i, S>(&'a self, text: S) -> PrettyTree<'a>
@@ -157,7 +172,7 @@ impl<'a> PrettyProvider<'a> {
         S: Into<Cow<'i, str>>,
         'i: 'a,
     {
-        self.text(text.into()).annotate(self.interface.clone())
+        self.text(text).annotate(self.interface.clone())
     }
 }
 
