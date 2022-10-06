@@ -7,8 +7,11 @@
 
 extern crate alloc;
 
-mod traits;
+mod blocks;
 mod providers;
+mod traits;
 
-pub use crate::traits::{PrettyPrint};
-pub use crate::providers::{PrettyProvider, PrettyTree};
+pub use crate::{
+    providers::{PrettyProvider, PrettyTree},
+    traits::PrettyPrint,
+};
