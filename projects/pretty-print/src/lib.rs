@@ -14,4 +14,5 @@ mod traits;
 pub use crate::{
     providers::{PrettyProvider, PrettyTree},
     traits::PrettyPrint,
+    blocks::k_and_r_bracket::KAndRBracket,
 };
