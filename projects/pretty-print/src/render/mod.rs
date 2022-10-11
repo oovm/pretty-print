@@ -397,12 +397,12 @@ impl<'d, 'a, T, A> Best<'d, 'a, T, A>
                             return false;
                         }
                     }
-                    Doc::SmallText(ref str) => {
-                        pos += str.len();
-                        if pos > self.width {
-                            return false;
-                        }
-                    }
+                    // Doc::SmallText(ref str) => {
+                    //     pos += str.len();
+                    //     if pos > self.width {
+                    //         return false;
+                    //     }
+                    // }
                     Doc::FlatAlt(ref b, ref f) => {
                         doc = match mode {
                             Mode::Break => b,
@@ -501,11 +501,11 @@ impl<'d, 'a, T, A> Best<'d, 'a, T, A>
                             self.pos += len;
                             fits &= self.pos <= self.width;
                         }
-                        Doc::SmallText(ref s) => {
-                            out.write_str_all(s)?;
-                            self.pos += len;
-                            fits &= self.pos <= self.width;
-                        }
+                        // Doc::SmallText(ref s) => {
+                        //     out.write_str_all(s)?;
+                        //     self.pos += len;
+                        //     fits &= self.pos <= self.width;
+                        // }
                         _ => unreachable!(),
                     },
                     Doc::OwnedText(ref s) => {
@@ -518,11 +518,11 @@ impl<'d, 'a, T, A> Best<'d, 'a, T, A>
                         self.pos += s.len();
                         fits &= self.pos <= self.width;
                     }
-                    Doc::SmallText(ref s) => {
-                        out.write_str_all(s)?;
-                        self.pos += s.len();
-                        fits &= self.pos <= self.width;
-                    }
+                    // Doc::SmallText(ref s) => {
+                    //     out.write_str_all(s)?;
+                    //     self.pos += s.len();
+                    //     fits &= self.pos <= self.width;
+                    // }
                     Doc::Annotated(ref ann, ref doc) => {
                         out.push_annotation(ann)?;
                         self.annotation_levels.push(self.bcmds.len());

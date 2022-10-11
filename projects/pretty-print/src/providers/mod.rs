@@ -1,10 +1,8 @@
-use crate::PrettyPrint;
+use crate::{Arena, DocAllocator, Pretty, PrettyPrint};
 use alloc::borrow::Cow;
 use core::fmt::{Debug, Formatter};
-use pretty::{
-    termcolor::{Color, ColorSpec},
-    Arena, DocAllocator, DocBuilder, Pretty,
-};
+use termcolor::{Color, ColorSpec};
+use crate::DocBuilder;
 
 /// Represents a pretty-printable tree.
 pub type PrettyTree<'a> = DocBuilder<'a, Arena<'a, ColorSpec>, ColorSpec>;
@@ -72,105 +70,104 @@ impl<'a> PrettyProvider<'a> {
     ///
     /// The given text must not contain line breaks.
     pub fn text<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.arena.text(text.into())
     }
     /// Allocate a document containing the given text.
     pub fn keyword<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
     pub fn identifier<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.operator(text)
     }
     /// Allocate a document containing the given text.
     pub fn generic<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.macros.clone())
     }
 
     /// Allocate a document containing the given text.
     pub fn variable<'i, S>(&'a self, text: S, mutable: bool) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         if mutable { self.text(text).annotate(self.local_mut.clone()) } else { self.text(text).annotate(self.local.clone()) }
     }
 
     /// Allocate a document containing the given text.
     pub fn argument<'i, S>(&'a self, text: S, mutable: bool) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         if mutable {
             self.text(text).annotate(self.argument_mut.clone())
-        }
-        else {
+        } else {
             self.text(text).annotate(self.argument.clone())
         }
     }
     /// Allocate a document containing the given text.
     pub fn operator<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.operator.clone())
     }
     /// Allocate a document containing the given text.
     pub fn string<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.string.clone())
     }
     /// Allocate a document containing the given text.
     pub fn metadata<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.macros.clone())
     }
 
     /// Allocate a document containing the given text.
     pub fn number<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.number.clone())
     }
     /// Allocate a document containing the given text.
     pub fn structure<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.structure.clone())
     }
     /// Allocate a document containing the given text.
     pub fn interface<'i, S>(&'a self, text: S) -> PrettyTree<'a>
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        where
+            S: Into<Cow<'i, str>>,
+            'i: 'a,
     {
         self.text(text).annotate(self.interface.clone())
     }
@@ -180,9 +177,9 @@ impl<'a> PrettyProvider<'a> {
     /// Allocate a document concatenating the given documents.
     #[inline]
     pub fn concat<I>(&'a self, docs: I) -> PrettyTree<'a>
-    where
-        I: IntoIterator,
-        I::Item: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec>,
+        where
+            I: IntoIterator,
+            I::Item: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec>,
     {
         self.arena.concat(docs)
     }
@@ -195,9 +192,9 @@ impl<'a> PrettyProvider<'a> {
     /// like `RefDoc` or `RcDoc`
     #[inline]
     pub fn intersperse<T, S>(&'a self, terms: &[T], joint: S) -> PrettyTree<'a>
-    where
-        T: PrettyPrint,
-        S: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec> + Clone,
+        where
+            T: PrettyPrint,
+            S: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec> + Clone,
     {
         self.arena.intersperse(terms.iter().map(|x| x.build(self)), joint)
     }
@@ -210,8 +207,8 @@ impl<'a> PrettyProvider<'a> {
     /// like `RefDoc` or `RcDoc`
     #[inline]
     pub fn join<T>(&'a self, terms: &[T], joint: &'static str) -> PrettyTree<'a>
-    where
-        T: PrettyPrint,
+        where
+            T: PrettyPrint,
     {
         self.arena.intersperse(terms.iter().map(|x| x.build(self)), self.arena.text(joint))
     }

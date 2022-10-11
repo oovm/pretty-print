@@ -1,5 +1,5 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![deny(missing_debug_implementations, missing_copy_implementations)]
+// #![cfg_attr(not(feature = "std"), no_std)]
+// #![deny(missing_debug_implementations, missing_copy_implementations)]
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 #![doc = include_str!("../readme.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oovm/shape-rs/dev/projects/images/Trapezohedron.svg")]
@@ -28,6 +28,7 @@ use std::{
     ops::{Add, AddAssign, Deref},
     rc::Rc,
 };
+
 
 #[cfg(feature = "termcolor")]
 use termcolor::{ColorSpec, WriteColor};
@@ -60,7 +61,6 @@ pub enum Doc<'a, T, A = ()>
     RenderLen(usize, T),
     OwnedText(Box<str>),
     BorrowedText(&'a str),
-    SmallText(SmallText),
     Annotated(A, T),
     Union(T, T),
     Column(T::ColumnFn),
@@ -76,8 +76,6 @@ impl<'a, T, A> Default for Doc<'a, T, A>
         Self::Nil
     }
 }
-
-pub type SmallText = arrayvec::ArrayString<[u8; 22]>;
 
 fn append_docs<'a, 'd, T, A>(
     mut doc: &'d Doc<'a, T, A>,
@@ -140,7 +138,7 @@ impl<'a, T, A> fmt::Debug for Doc<'a, T, A>
             Doc::RenderLen(_, d) => d.fmt(f),
             Doc::OwnedText(ref s) => s.fmt(f),
             Doc::BorrowedText(ref s) => s.fmt(f),
-            Doc::SmallText(ref s) => s.fmt(f),
+            // Doc::SmallText(ref s) => s.fmt(f),
             Doc::Annotated(ref ann, ref doc) => {
                 f.debug_tuple("Annotated").field(ann).field(doc).finish()
             }
@@ -152,197 +150,223 @@ impl<'a, T, A> fmt::Debug for Doc<'a, T, A>
     }
 }
 
-macro_rules! impl_doc {
-    ($name: ident, $ptr: ident, $allocator: ident) => {
-        #[derive(Clone)]
-        pub struct $name<'a, A = ()>($ptr<Doc<'a, $name<'a, A>, A>>);
+#[derive(Clone)]
+pub struct RcDoc<'a, A = ()>   (Rc<Doc<'a, RcDoc<'a, A>, A>>);
+impl<'a, A> fmt::Debug for RcDoc<'a, A>
+    where
+        A: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl<'a, A> RcDoc<'a, A> {
+    pub fn new(doc: Doc<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
+        RcDoc(Rc::new(doc))
+    }
+}
+impl<'a, A> From<Doc<'a, Self, A>> for RcDoc<'a, A> {
+    fn from(doc: Doc<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
+        RcDoc::new(doc)
+    }
+}
+impl<'a, A> Deref for RcDoc<'a, A> {
+    type Target = Doc<'a, RcDoc<'a, A>, A>;
 
-        impl<'a, A> fmt::Debug for $name<'a, A>
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<'a, A> DocAllocator<'a, A> for RcAllocator
+    where
+        A: 'a,
+{
+    type Doc = RcDoc<'a, A>;
+
+    #[inline]
+    fn alloc(&'a self, doc: Doc<'a, Self::Doc, A>) -> Self::Doc {
+        RcDoc::new(doc)
+    }
+    fn alloc_column_fn(
+        &'a self,
+        f: impl Fn(usize) -> Self::Doc + 'a,
+    ) -> <Self::Doc as DocPtr<'a, A>>::ColumnFn {
+        Rc::new(f)
+    }
+    fn alloc_width_fn(
+        &'a self,
+        f: impl Fn(isize) -> Self::Doc + 'a,
+    ) -> <Self::Doc as DocPtr<'a, A>>::WidthFn {
+        Rc::new(f)
+    }
+}
+impl<'a, A> DocPtr<'a, A> for RcDoc<'a, A> {
+    type ColumnFn = std::rc::Rc<dyn Fn(usize) -> Self + 'a>;
+    type WidthFn = std::rc::Rc<dyn Fn(isize) -> Self + 'a>;
+}
+impl<'a, A> StaticDoc<'a, A> for RcDoc<'a, A> {
+    type Allocator = RcAllocator;
+    const ALLOCATOR: &'static Self::Allocator = &RcAllocator;
+}
+impl<'a, A> RcDoc<'a, A>
+    where
+{
+    ///   An empty document.
+    #[inline]
+    pub fn nil() -> Self {
+        Doc::Nil.into()
+    }
+
+    ///   A single hardline.
+    #[inline]
+    pub fn hardline() -> Self {
+        Doc::Hardline.into()
+    }
+
+    #[inline]
+    pub fn space() -> Self {
+        Doc::BorrowedText(" ").into()
+    }
+
+    #[inline]
+    pub fn fail() -> Self {
+        Doc::Fail.into()
+    }
+}
+impl<'a, A> RcDoc<'a, A>
+    where
+{
+    ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
+    #[inline]
+    pub fn line() -> Self {
+        Self::hardline().flat_alt(Self::space()).into()
+    }
+
+    ///   Acts like  `line`  but behaves like  `nil`  if grouped on a single line
+    #[inline]
+    pub fn line_() -> Self {
+        Self::hardline().flat_alt(Self::nil()).into()
+    }
+}
+impl<'a, A> RcDoc<'a, A> {
+    ///   The text  `t.to_string()` .
+    ///
+    ///   The given text must not contain line breaks.
+    #[inline]
+    pub fn as_string<U: fmt::Display>(data: U) -> Self {
+        RcAllocator.as_string(data).into_doc()
+    }
+
+    ///   The given text, which must not contain line breaks.
+    #[inline]
+    pub fn text<U: Into<Cow<'a, str>>>(data: U) -> Self {
+        RcAllocator.text(data).into_doc()
+    }
+
+    ///   Append the given document after this document.
+    #[inline]
+    pub fn append<D>(self, that: D) -> Self
         where
-            A: fmt::Debug,
-        {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
+            D: Pretty<'a, RcAllocator, A>,
+    {
+        DocBuilder(&RcAllocator, self.into()).append(that).into_doc()
+    }
 
-        impl<'a, A> $name<'a, A> {
-            pub fn new(doc: Doc<'a, $name<'a, A>, A>) -> $name<'a, A> {
-                $name($ptr::new(doc))
-            }
-        }
-
-        impl<'a, A> From<Doc<'a, Self, A>> for $name<'a, A> {
-            fn from(doc: Doc<'a, $name<'a, A>, A>) -> $name<'a, A> {
-                $name::new(doc)
-            }
-        }
-
-        impl<'a, A> Deref for $name<'a, A> {
-            type Target = Doc<'a, $name<'a, A>, A>;
-
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
-
-        impl<'a, A> DocAllocator<'a, A> for $allocator
+    ///   A single document concatenating all the given documents.
+    #[inline]
+    pub fn concat<I>(docs: I) -> Self
         where
-            A: 'a,
-        {
-            type Doc = $name<'a, A>;
+            I: IntoIterator,
+            I::Item: Pretty<'a, RcAllocator, A>,
+    {
+        RcAllocator.concat(docs).into_doc()
+    }
 
-            #[inline]
-            fn alloc(&'a self, doc: Doc<'a, Self::Doc, A>) -> Self::Doc {
-                $name::new(doc)
-            }
-            fn alloc_column_fn(
-                &'a self,
-                f: impl Fn(usize) -> Self::Doc + 'a,
-            ) -> <Self::Doc as DocPtr<'a, A>>::ColumnFn {
-                Rc::new(f)
-            }
-            fn alloc_width_fn(
-                &'a self,
-                f: impl Fn(isize) -> Self::Doc + 'a,
-            ) -> <Self::Doc as DocPtr<'a, A>>::WidthFn {
-                Rc::new(f)
-            }
-        }
+    ///   A single document interspersing the given separator  `S`  between the given documents.  For
+    ///   example, if the documents are  `[A, B, C, ..., Z]` , this yields  `[A, S, B, S, C, S, ..., S, Z]` .
+    ///
+    ///   Compare  [the  `intersperse`  method from the  `itertools`  crate] ( https://docs.rs/itertools/0.5.9/itertools/trait.Itertools.html#method.intersperse ) .
+    ///
+    ///   NOTE: The separator type,  `S`  may need to be cloned. Consider using cheaply cloneable ptr
+    ///   like  `RefDoc`  or  `RcDoc`
+    #[inline]
+    pub fn intersperse<I, S>(docs: I, separator: S) -> Self
+        where
+            I: IntoIterator,
+            I::Item: Pretty<'a, RcAllocator, A>,
+            S: Pretty<'a, RcAllocator, A> + Clone,
+            A: Clone,
+    {
+        RcAllocator.intersperse(docs, separator).into_doc()
+    }
 
-        impl<'a, A> DocPtr<'a, A> for $name<'a, A> {
-            type ColumnFn = std::rc::Rc<dyn Fn(usize) -> Self + 'a>;
-            type WidthFn = std::rc::Rc<dyn Fn(isize) -> Self + 'a>;
-        }
+    ///   Acts as  `self`  when laid out on multiple lines and acts as  `that`  when laid out on a single line.
+    #[inline]
+    pub fn flat_alt<D>(self, doc: D) -> Self
+        where
+            D: Pretty<'a, RcAllocator, A>,
+    {
+        DocBuilder(&RcAllocator, self.into())
+            .flat_alt(doc)
+            .into_doc()
+    }
 
-        impl<'a, A> StaticDoc<'a, A> for $name<'a, A> {
-            type Allocator = $allocator;
-            const ALLOCATOR: &'static Self::Allocator = &$allocator;
-        }
+    ///   Mark this document as a group.
+    ///
+    ///   Groups are layed out on a single line if possible.  Within a group, all basic documents with
+    ///   several possible layouts are assigned the same layout, that is, they are all layed out
+    ///   horizontally and combined into a one single line, or they are each layed out on their own
+    ///   line.
+    #[inline]
+    pub fn group(self) -> Self {
+        DocBuilder(&RcAllocator, self.into()).group().into_doc()
+    }
 
-        impl_doc_methods!($name ('a, A) where () where ());
+    ///   Increase the indentation level of this document.
+    #[inline]
+    pub fn nest(self, offset: isize) -> Self {
+        DocBuilder(&RcAllocator, self.into()).nest(offset).into_doc()
+    }
 
-        impl<'a, A> $name<'a, A> {
-            /// The text `t.to_string()`.
-            ///
-            /// The given text must not contain line breaks.
-            #[inline]
-            pub fn as_string<U: fmt::Display>(data: U) -> Self {
-                $allocator.as_string(data).into_doc()
-            }
+    #[inline]
+    pub fn annotate(self, ann: A) -> Self {
+        DocBuilder(&RcAllocator, self.into())
+            .annotate(ann)
+            .into_doc()
+    }
 
-            /// The given text, which must not contain line breaks.
-            #[inline]
-            pub fn text<U: Into<Cow<'a, str>>>(data: U) -> Self {
-                $allocator.text(data).into_doc()
-            }
+    #[inline]
+    pub fn union<D>(self, other: D) -> Self
+        where
+            D: Into<BuildDoc<'a, Self, A>>,
+    {
+        DocBuilder(&RcAllocator, self.into()).union(other).into_doc()
+    }
 
-            /// Append the given document after this document.
-            #[inline]
-            pub fn append<D>(self, that: D) -> Self
-            where
-                D: Pretty<'a, $allocator, A>,
-            {
-                DocBuilder(&$allocator, self.into()).append(that).into_doc()
-            }
+    #[inline]
+    pub fn softline() -> Self {
+        Self::line().group()
+    }
 
-            /// A single document concatenating all the given documents.
-            #[inline]
-            pub fn concat<I>(docs: I) -> Self
-            where
-                I: IntoIterator,
-                I::Item: Pretty<'a, $allocator, A>,
-            {
-                $allocator.concat(docs).into_doc()
-            }
+    ///   A  `softline_`  acts like  `nil`  if the document fits the page, otherwise like  `line_`
+    #[inline]
+    pub fn softline_() -> Self {
+        Self::line_().group()
+    }
 
-            /// A single document interspersing the given separator `S` between the given documents.  For
-            /// example, if the documents are `[A, B, C, ..., Z]`, this yields `[A, S, B, S, C, S, ..., S, Z]`.
-            ///
-            /// Compare [the `intersperse` method from the `itertools` crate](https://docs.rs/itertools/0.5.9/itertools/trait.Itertools.html#method.intersperse).
-            ///
-            /// NOTE: The separator type, `S` may need to be cloned. Consider using cheaply cloneable ptr
-            /// like `RefDoc` or `RcDoc`
-            #[inline]
-            pub fn intersperse<I, S>(docs: I, separator: S) -> Self
-            where
-                I: IntoIterator,
-                I::Item: Pretty<'a, $allocator, A>,
-                S: Pretty<'a, $allocator, A> + Clone,
-                A: Clone,
-            {
-                $allocator.intersperse(docs, separator).into_doc()
-            }
+    #[inline]
+    pub fn column(f: impl Fn(usize) -> Self + 'static) -> Self {
+        DocBuilder(&RcAllocator, Doc::Column(RcAllocator.alloc_column_fn(f)).into()).into_doc()
+    }
 
-            /// Acts as `self` when laid out on multiple lines and acts as `that` when laid out on a single line.
-            #[inline]
-            pub fn flat_alt<D>(self, doc: D) -> Self
-            where
-                D: Pretty<'a, $allocator, A>,
-            {
-                DocBuilder(&$allocator, self.into())
-                    .flat_alt(doc)
-                    .into_doc()
-            }
-
-            /// Mark this document as a group.
-            ///
-            /// Groups are layed out on a single line if possible.  Within a group, all basic documents with
-            /// several possible layouts are assigned the same layout, that is, they are all layed out
-            /// horizontally and combined into a one single line, or they are each layed out on their own
-            /// line.
-            #[inline]
-            pub fn group(self) -> Self {
-                DocBuilder(&$allocator, self.into()).group().into_doc()
-            }
-
-            /// Increase the indentation level of this document.
-            #[inline]
-            pub fn nest(self, offset: isize) -> Self {
-                DocBuilder(&$allocator, self.into()).nest(offset).into_doc()
-            }
-
-            #[inline]
-            pub fn annotate(self, ann: A) -> Self {
-                DocBuilder(&$allocator, self.into())
-                    .annotate(ann)
-                    .into_doc()
-            }
-
-            #[inline]
-            pub fn union<D>(self, other: D) -> Self
-            where
-                D: Into<BuildDoc<'a, Self, A>>,
-            {
-                DocBuilder(&$allocator, self.into()).union(other).into_doc()
-            }
-
-            #[inline]
-            pub fn softline() -> Self {
-                Self::line().group()
-            }
-
-            /// A `softline_` acts like `nil` if the document fits the page, otherwise like `line_`
-            #[inline]
-            pub fn softline_() -> Self {
-                Self::line_().group()
-            }
-
-            #[inline]
-            pub fn column(f: impl Fn(usize) -> Self + 'static) -> Self {
-                DocBuilder(&$allocator, Doc::Column($allocator.alloc_column_fn(f)).into()).into_doc()
-            }
-
-            #[inline]
-            pub fn nesting(f: impl Fn(usize) -> Self + 'static) -> Self {
-                DocBuilder(&$allocator, Doc::Nesting($allocator.alloc_column_fn(f)).into()).into_doc()
-            }
-        }
-    };
+    #[inline]
+    pub fn nesting(f: impl Fn(usize) -> Self + 'static) -> Self {
+        DocBuilder(&RcAllocator, Doc::Nesting(RcAllocator.alloc_column_fn(f)).into()).into_doc()
+    }
 }
 
 enum FmtText {
-    Small(SmallText),
+    Small(String),
     Large(String),
 }
 
@@ -350,12 +374,13 @@ impl fmt::Write for FmtText {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         match self {
             FmtText::Small(buf) => {
-                if buf.try_push_str(s).is_err() {
-                    let mut new_str = String::with_capacity(buf.len() + s.len());
-                    new_str.push_str(buf);
-                    new_str.push_str(s);
-                    *self = FmtText::Large(new_str);
-                }
+                // if buf.try_push_str(s).is_err() {
+                //     let mut new_str = String::with_capacity(buf.len() + s.len());
+                //     new_str.push_str(buf);
+                //     new_str.push_str(s);
+                //     *self = FmtText::Large(new_str);
+                // }
+                buf.push_str(s)
             }
             FmtText::Large(buf) => buf.push_str(s),
         }
@@ -409,8 +434,6 @@ macro_rules! impl_doc_methods {
     };
 }
 
-impl_doc!(BoxDoc, Box, BoxAllocator);
-impl_doc!(RcDoc, Rc, RcAllocator);
 
 impl_doc_methods!(Doc ('a, D, A) where (D: DocPtr<'a, A>) where (D: StaticDoc<'a, A>));
 impl_doc_methods!(BuildDoc ('a, D, A) where (D: DocPtr<'a, A>) where (D: StaticDoc<'a, A>));
@@ -664,15 +687,6 @@ pub trait Pretty<'a, D, A = ()>
     fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A>;
 }
 
-impl<'a, A> Pretty<'a, BoxAllocator, A> for BoxDoc<'a, A>
-    where
-        A: 'a,
-{
-    fn pretty(self, allocator: &'a BoxAllocator) -> DocBuilder<'a, BoxAllocator, A> {
-        DocBuilder(allocator, self.into())
-    }
-}
-
 impl<'a, A> Pretty<'a, RcAllocator, A> for RcDoc<'a, A>
     where
         A: 'a,
@@ -865,12 +879,9 @@ pub trait DocAllocator<'a, A = ()>
     #[inline]
     fn as_string<U: fmt::Display>(&'a self, data: U) -> DocBuilder<'a, Self, A> {
         use std::fmt::Write;
-        let mut buf = FmtText::Small(SmallText::new());
+        let mut buf = String::new();
         write!(buf, "{}", data).unwrap();
-        let doc = match buf {
-            FmtText::Small(b) => Doc::SmallText(b),
-            FmtText::Large(b) => Doc::OwnedText(b.into()),
-        };
+        let doc = Doc::OwnedText(buf.into());
         DocBuilder(self, doc.into()).with_utf8_len()
     }
 
@@ -1024,11 +1035,6 @@ impl<'a, A> From<RefDoc<'a, A>> for BuildDoc<'a, RefDoc<'a, A>, A> {
     }
 }
 
-impl<'a, A> From<BoxDoc<'a, A>> for BuildDoc<'a, BoxDoc<'a, A>, A> {
-    fn from(s: BoxDoc<'a, A>) -> Self {
-        BuildDoc::DocPtr(s)
-    }
-}
 
 impl<'a, A> From<RcDoc<'a, A>> for BuildDoc<'a, RcDoc<'a, A>, A> {
     fn from(s: RcDoc<'a, A>) -> Self {
@@ -1126,7 +1132,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         let s = match &*self {
             Doc::OwnedText(s) => &s[..],
             Doc::BorrowedText(s) => s,
-            Doc::SmallText(s) => s,
+            // Doc::SmallText(s) => s,
             _ => return self,
         };
         use unicode_segmentation::UnicodeSegmentation;
@@ -1214,7 +1220,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
             Doc::Group(_)
             | Doc::OwnedText(_)
             | Doc::BorrowedText(_)
-            | Doc::SmallText(_)
+            // | Doc::SmallText(_)
             | Doc::Nil => self,
             _ => {
                 let DocBuilder(allocator, this) = self;
