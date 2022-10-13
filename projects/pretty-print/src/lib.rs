@@ -365,28 +365,6 @@ impl<'a, A> RcDoc<'a, A> {
     }
 }
 
-enum FmtText {
-    Small(String),
-    Large(String),
-}
-
-impl fmt::Write for FmtText {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        match self {
-            FmtText::Small(buf) => {
-                // if buf.try_push_str(s).is_err() {
-                //     let mut new_str = String::with_capacity(buf.len() + s.len());
-                //     new_str.push_str(buf);
-                //     new_str.push_str(s);
-                //     *self = FmtText::Large(new_str);
-                // }
-                buf.push_str(s)
-            }
-            FmtText::Large(buf) => buf.push_str(s),
-        }
-        Ok(())
-    }
-}
 
 macro_rules! impl_doc_methods {
     ($name: ident ( $($params: tt)* ) where ( $($where_: tt)* ) where ( $($where_2: tt)* )) => {
