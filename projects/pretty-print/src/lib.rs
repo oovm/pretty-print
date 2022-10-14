@@ -1,6 +1,6 @@
 // #![cfg_attr(not(feature = "std"), no_std)]
 // #![deny(missing_debug_implementations, missing_copy_implementations)]
-#![warn(missing_docs, rustdoc::missing_crate_level_docs)]
+// #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 #![doc = include_str!("../readme.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oovm/shape-rs/dev/projects/images/Trapezohedron.svg")]
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oovm/shape-rs/dev/projects/images/Trapezohedron.svg")]
@@ -17,10 +17,6 @@ pub use crate::{
     blocks::k_and_r_bracket::KAndRBracket,
 };
 
-
-#[cfg(feature = "termcolor")]
-pub extern crate termcolor;
-
 use std::{
     borrow::Cow,
     convert::TryInto,
@@ -29,8 +25,6 @@ use std::{
     rc::Rc,
 };
 
-
-#[cfg(feature = "termcolor")]
 use termcolor::{ColorSpec, WriteColor};
 
 pub mod block;
@@ -47,9 +41,9 @@ pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated};
 /// The `T` parameter is used to abstract over pointers to `Doc`. See `RefDoc` and `BoxDoc` for how
 /// it is used
 #[derive(Clone)]
-pub enum Doc<'a, T, A = ()>
+pub enum DocumentTree<'a, T>
     where
-        T: DocPtr<'a, A>,
+        T: DocPtr<'a, ColorSpec>,
 {
     Nil,
     Append(T, T),
@@ -60,15 +54,15 @@ pub enum Doc<'a, T, A = ()>
     // Stores the length of a string document that is not just ascii
     RenderLen(usize, T),
     OwnedText(Box<str>),
-    BorrowedText(&'a str),
-    Annotated(A, T),
+    BorrowedText(&'static str),
+    Annotated(ColorSpec, T),
     Union(T, T),
     Column(T::ColumnFn),
     Nesting(T::ColumnFn),
     Fail,
 }
 
-impl<'a, T, A> Default for Doc<'a, T, A>
+impl<'a, T, A> Default for DocumentTree<'a, T>
     where
         T: DocPtr<'a, A>,
 {
@@ -78,14 +72,14 @@ impl<'a, T, A> Default for Doc<'a, T, A>
 }
 
 fn append_docs<'a, 'd, T, A>(
-    mut doc: &'d Doc<'a, T, A>,
-    consumer: &mut impl FnMut(&'d Doc<'a, T, A>),
+    mut doc: &'d DocumentTree<'a, T>,
+    consumer: &mut impl FnMut(&'d DocumentTree<'a, T>),
 ) where
     T: DocPtr<'a, A>,
 {
     loop {
         match doc {
-            Doc::Append(l, r) => {
+            DocumentTree::Append(l, r) => {
                 append_docs(l, consumer);
                 doc = r;
             }
@@ -94,27 +88,27 @@ fn append_docs<'a, 'd, T, A>(
     }
 }
 
-impl<'a, T, A> fmt::Debug for Doc<'a, T, A>
+impl<'a, T, A> fmt::Debug for DocumentTree<'a, T>
     where
         T: DocPtr<'a, A> + fmt::Debug,
         A: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let is_line = |doc: &Doc<'a, T, A>| match doc {
-            Doc::FlatAlt(x, y) => {
-                matches!((&**x, &**y), (Doc::Hardline, Doc::BorrowedText(" ")))
+        let is_line = |doc: &DocumentTree<'a, T>| match doc {
+            DocumentTree::FlatAlt(x, y) => {
+                matches!((&**x, &**y), (DocumentTree::Hardline, DocumentTree::BorrowedText(" ")))
             }
             _ => false,
         };
-        let is_line_ = |doc: &Doc<'a, T, A>| match doc {
-            Doc::FlatAlt(x, y) => {
-                matches!((&**x, &**y), (Doc::Hardline, Doc::Nil))
+        let is_line_ = |doc: &DocumentTree<'a, T>| match doc {
+            DocumentTree::FlatAlt(x, y) => {
+                matches!((&**x, &**y), (DocumentTree::Hardline, DocumentTree::Nil))
             }
             _ => false,
         };
         match self {
-            Doc::Nil => f.debug_tuple("Nil").finish(),
-            Doc::Append(..) => {
+            DocumentTree::Nil => f.debug_tuple("Nil").finish(),
+            DocumentTree::Append(..) => {
                 let mut f = f.debug_list();
                 append_docs(self, &mut |doc| {
                     f.entry(doc);
@@ -123,8 +117,8 @@ impl<'a, T, A> fmt::Debug for Doc<'a, T, A>
             }
             _ if is_line(self) => f.debug_tuple("Line").finish(),
             _ if is_line_(self) => f.debug_tuple("Line_").finish(),
-            Doc::FlatAlt(ref x, ref y) => f.debug_tuple("FlatAlt").field(x).field(y).finish(),
-            Doc::Group(ref doc) => {
+            DocumentTree::FlatAlt(ref x, ref y) => f.debug_tuple("FlatAlt").field(x).field(y).finish(),
+            DocumentTree::Group(ref doc) => {
                 if is_line(self) {
                     return f.debug_tuple("SoftLine").finish();
                 }
@@ -133,25 +127,26 @@ impl<'a, T, A> fmt::Debug for Doc<'a, T, A>
                 }
                 f.debug_tuple("Group").field(doc).finish()
             }
-            Doc::Nest(off, ref doc) => f.debug_tuple("Nest").field(&off).field(doc).finish(),
-            Doc::Hardline => f.debug_tuple("Hardline").finish(),
-            Doc::RenderLen(_, d) => d.fmt(f),
-            Doc::OwnedText(ref s) => s.fmt(f),
-            Doc::BorrowedText(ref s) => s.fmt(f),
+            DocumentTree::Nest(off, ref doc) => f.debug_tuple("Nest").field(&off).field(doc).finish(),
+            DocumentTree::Hardline => f.debug_tuple("Hardline").finish(),
+            DocumentTree::RenderLen(_, d) => d.fmt(f),
+            DocumentTree::OwnedText(ref s) => s.fmt(f),
+            DocumentTree::BorrowedText(ref s) => s.fmt(f),
             // Doc::SmallText(ref s) => s.fmt(f),
-            Doc::Annotated(ref ann, ref doc) => {
+            DocumentTree::Annotated(ref ann, ref doc) => {
                 f.debug_tuple("Annotated").field(ann).field(doc).finish()
             }
-            Doc::Union(ref l, ref r) => f.debug_tuple("Union").field(l).field(r).finish(),
-            Doc::Column(_) => f.debug_tuple("Column(..)").finish(),
-            Doc::Nesting(_) => f.debug_tuple("Nesting(..)").finish(),
-            Doc::Fail => f.debug_tuple("Fail").finish(),
+            DocumentTree::Union(ref l, ref r) => f.debug_tuple("Union").field(l).field(r).finish(),
+            DocumentTree::Column(_) => f.debug_tuple("Column(..)").finish(),
+            DocumentTree::Nesting(_) => f.debug_tuple("Nesting(..)").finish(),
+            DocumentTree::Fail => f.debug_tuple("Fail").finish(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct RcDoc<'a, A = ()>   (Rc<Doc<'a, RcDoc<'a, A>, A>>);
+pub struct RcDoc<'a, A = ()>   (Rc<DocumentTree<'a, RcDoc<'a, A>, A>>);
+
 impl<'a, A> fmt::Debug for RcDoc<'a, A>
     where
         A: fmt::Debug,
@@ -160,23 +155,27 @@ impl<'a, A> fmt::Debug for RcDoc<'a, A>
         self.0.fmt(f)
     }
 }
+
 impl<'a, A> RcDoc<'a, A> {
-    pub fn new(doc: Doc<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
+    pub fn new(doc: DocumentTree<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
         RcDoc(Rc::new(doc))
     }
 }
-impl<'a, A> From<Doc<'a, Self, A>> for RcDoc<'a, A> {
-    fn from(doc: Doc<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
+
+impl<'a, A> From<DocumentTree<'a, Self, A>> for RcDoc<'a, A> {
+    fn from(doc: DocumentTree<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
         RcDoc::new(doc)
     }
 }
+
 impl<'a, A> Deref for RcDoc<'a, A> {
-    type Target = Doc<'a, RcDoc<'a, A>, A>;
+    type Target = DocumentTree<'a, RcDoc<'a, A>, A>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
+
 impl<'a, A> DocAllocator<'a, A> for RcAllocator
     where
         A: 'a,
@@ -184,7 +183,7 @@ impl<'a, A> DocAllocator<'a, A> for RcAllocator
     type Doc = RcDoc<'a, A>;
 
     #[inline]
-    fn alloc(&'a self, doc: Doc<'a, Self::Doc, A>) -> Self::Doc {
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc {
         RcDoc::new(doc)
     }
     fn alloc_column_fn(
@@ -200,39 +199,43 @@ impl<'a, A> DocAllocator<'a, A> for RcAllocator
         Rc::new(f)
     }
 }
+
 impl<'a, A> DocPtr<'a, A> for RcDoc<'a, A> {
     type ColumnFn = std::rc::Rc<dyn Fn(usize) -> Self + 'a>;
     type WidthFn = std::rc::Rc<dyn Fn(isize) -> Self + 'a>;
 }
+
 impl<'a, A> StaticDoc<'a, A> for RcDoc<'a, A> {
     type Allocator = RcAllocator;
     const ALLOCATOR: &'static Self::Allocator = &RcAllocator;
 }
+
 impl<'a, A> RcDoc<'a, A>
     where
 {
     ///   An empty document.
     #[inline]
     pub fn nil() -> Self {
-        Doc::Nil.into()
+        DocumentTree::Nil.into()
     }
 
     ///   A single hardline.
     #[inline]
     pub fn hardline() -> Self {
-        Doc::Hardline.into()
+        DocumentTree::Hardline.into()
     }
 
     #[inline]
     pub fn space() -> Self {
-        Doc::BorrowedText(" ").into()
+        DocumentTree::BorrowedText(" ").into()
     }
 
     #[inline]
     pub fn fail() -> Self {
-        Doc::Fail.into()
+        DocumentTree::Fail.into()
     }
 }
+
 impl<'a, A> RcDoc<'a, A>
     where
 {
@@ -248,6 +251,7 @@ impl<'a, A> RcDoc<'a, A>
         Self::hardline().flat_alt(Self::nil()).into()
     }
 }
+
 impl<'a, A> RcDoc<'a, A> {
     ///   The text  `t.to_string()` .
     ///
@@ -259,7 +263,7 @@ impl<'a, A> RcDoc<'a, A> {
 
     ///   The given text, which must not contain line breaks.
     #[inline]
-    pub fn text<U: Into<Cow<'a, str>>>(data: U) -> Self {
+    pub fn text<U: Into<Cow<'static, str>>>(data: U) -> Self {
         RcAllocator.text(data).into_doc()
     }
 
@@ -356,65 +360,98 @@ impl<'a, A> RcDoc<'a, A> {
 
     #[inline]
     pub fn column(f: impl Fn(usize) -> Self + 'static) -> Self {
-        DocBuilder(&RcAllocator, Doc::Column(RcAllocator.alloc_column_fn(f)).into()).into_doc()
+        DocBuilder(&RcAllocator, DocumentTree::Column(RcAllocator.alloc_column_fn(f)).into()).into_doc()
     }
 
     #[inline]
     pub fn nesting(f: impl Fn(usize) -> Self + 'static) -> Self {
-        DocBuilder(&RcAllocator, Doc::Nesting(RcAllocator.alloc_column_fn(f)).into()).into_doc()
+        DocBuilder(&RcAllocator, DocumentTree::Nesting(RcAllocator.alloc_column_fn(f)).into()).into_doc()
     }
 }
 
+impl<'a, D, A> DocumentTree<'a, D, A>
+    where D: DocPtr<'a, A>
+{
+    ///   An empty document.
+    #[inline]
+    pub fn nil() -> Self {
+        DocumentTree::Nil.into()
+    }
 
-macro_rules! impl_doc_methods {
-    ($name: ident ( $($params: tt)* ) where ( $($where_: tt)* ) where ( $($where_2: tt)* )) => {
-        impl< $($params)* > $name< $($params)* >
-            where $($where_)*
-        {
-            /// An empty document.
-            #[inline]
-            pub fn nil() -> Self {
-                Doc::Nil.into()
-            }
+    ///   A single hardline.
+    #[inline]
+    pub fn hardline() -> Self {
+        DocumentTree::Hardline.into()
+    }
 
-            /// A single hardline.
-            #[inline]
-            pub fn hardline() -> Self {
-                Doc::Hardline.into()
-            }
+    #[inline]
+    pub fn space() -> Self {
+        DocumentTree::BorrowedText(" ").into()
+    }
 
-            #[inline]
-            pub fn space() -> Self {
-                Doc::BorrowedText(" ").into()
-            }
-
-            #[inline]
-            pub fn fail() -> Self {
-                Doc::Fail.into()
-            }
-        }
-
-        impl< $($params)* > $name< $($params)* >
-            where $($where_2)*
-        {
-            /// A line acts like a `\n` but behaves like `space` if it is grouped on a single line.
-            #[inline]
-            pub fn line() -> Self {
-                Self::hardline().flat_alt(Self::space()).into()
-            }
-
-            /// Acts like `line` but behaves like `nil` if grouped on a single line
-            #[inline]
-            pub fn line_() -> Self {
-                Self::hardline().flat_alt(Self::nil()).into()
-            }
-        }
-    };
+    #[inline]
+    pub fn fail() -> Self {
+        DocumentTree::Fail.into()
+    }
 }
 
+impl<'a, D, A> DocumentTree<'a, D, A>
+    where D: StaticDoc<'a, A>
+{
+    ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
+    #[inline]
+    pub fn line() -> Self {
+        Self::hardline().flat_alt(Self::space()).into()
+    }
 
-impl_doc_methods!(Doc ('a, D, A) where (D: DocPtr<'a, A>) where (D: StaticDoc<'a, A>));
-impl_doc_methods!(BuildDoc ('a, D, A) where (D: DocPtr<'a, A>) where (D: StaticDoc<'a, A>));
+    ///   Acts like  `line`  but behaves like  `nil`  if grouped on a single line
+    #[inline]
+    pub fn line_() -> Self {
+        Self::hardline().flat_alt(Self::nil()).into()
+    }
+}
+
+impl<'a, D, A> BuildDoc<'a, D, A>
+    where D: DocPtr<'a, A>
+{
+    ///   An empty document.
+    #[inline]
+    pub fn nil() -> Self {
+        DocumentTree::Nil.into()
+    }
+
+    ///   A single hardline.
+    #[inline]
+    pub fn hardline() -> Self {
+        DocumentTree::Hardline.into()
+    }
+
+    #[inline]
+    pub fn space() -> Self {
+        DocumentTree::BorrowedText(" ").into()
+    }
+
+    #[inline]
+    pub fn fail() -> Self {
+        DocumentTree::Fail.into()
+    }
+}
+
+impl<'a, D, A> BuildDoc<'a, D, A>
+    where D: StaticDoc<'a, A>
+{
+    ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
+    #[inline]
+    pub fn line() -> Self {
+        Self::hardline().flat_alt(Self::space()).into()
+    }
+
+    ///   Acts like  `line`  but behaves like  `nil`  if grouped on a single line
+    #[inline]
+    pub fn line_() -> Self {
+        Self::hardline().flat_alt(Self::nil()).into()
+    }
+}
 
 pub struct BoxAllocator;
 
@@ -434,7 +471,7 @@ impl<'a, T, A> BuildDoc<'a, T, A>
 
     /// The given text, which must not contain line breaks.
     #[inline]
-    pub fn text<U: Into<Cow<'a, str>>>(data: U) -> Self {
+    pub fn text<U: Into<Cow<'static, str>>>(data: U) -> Self {
         T::ALLOCATOR.text(data).1
     }
 
@@ -446,7 +483,7 @@ impl<'a, T, A> BuildDoc<'a, T, A>
     }
 }
 
-impl<'a, T, A> Doc<'a, T, A>
+impl<'a, T, A> DocumentTree<'a, T>
     where
         T: StaticDoc<'a, A>,
 {
@@ -460,7 +497,7 @@ impl<'a, T, A> Doc<'a, T, A>
 
     /// The given text, which must not contain line breaks.
     #[inline]
-    pub fn text<U: Into<Cow<'a, str>>>(data: U) -> Self {
+    pub fn text<U: Into<Cow<'static, str>>>(data: U) -> Self {
         T::ALLOCATOR.text(data).into_plain_doc()
     }
 
@@ -478,17 +515,17 @@ pub trait StaticDoc<'a, A>: DocPtr<'a, A>
     where
         A: 'a,
 {
-    type Allocator: DocAllocator<'a, A, Doc = Self> + 'static;
+    type Allocator: DocAllocator<'a, A, Doc=Self> + 'static;
     const ALLOCATOR: &'static Self::Allocator;
 }
 
-impl<'a, T, A, S> From<S> for Doc<'a, T, A>
+impl<'a, T, A, S> From<S> for DocumentTree<'a, T>
     where
         T: StaticDoc<'a, A>,
-        S: Into<Cow<'a, str>>,
+        S: Into<Cow<'static, str>>,
 {
-    fn from(s: S) -> Doc<'a, T, A> {
-        Doc::text(s)
+    fn from(s: S) -> DocumentTree<'a, T> {
+        DocumentTree::text(s)
     }
 }
 
@@ -497,7 +534,7 @@ pub struct PrettyFmt<'a, 'd, T, A>
         A: 'a,
         T: DocPtr<'a, A> + 'a,
 {
-    doc: &'d Doc<'a, T, A>,
+    doc: &'d DocumentTree<'a, T>,
     width: usize,
 }
 
@@ -510,7 +547,7 @@ impl<'a, T, A> fmt::Display for PrettyFmt<'a, '_, T, A>
     }
 }
 
-impl<'a, T, A> Doc<'a, T, A>
+impl<'a, T, A> DocumentTree<'a, T>
     where
         T: DocPtr<'a, A> + 'a,
 {
@@ -558,7 +595,7 @@ impl<'a, T, A> Doc<'a, T, A>
 }
 
 #[cfg(feature = "termcolor")]
-impl<'a, T> Doc<'a, T, ColorSpec>
+impl<'a, T> DocumentTree<'a, T, ColorSpec>
     where
         T: DocPtr<'a, ColorSpec> + 'a,
 {
@@ -602,7 +639,7 @@ impl<'a, D, A> Deref for DocBuilder<'a, D, A>
     where
         D: ?Sized + DocAllocator<'a, A>,
 {
-    type Target = Doc<'a, D::Doc, A>;
+    type Target = DocumentTree<'a, D::Doc, A>;
     fn deref(&self) -> &Self::Target {
         match &self.1 {
             BuildDoc::DocPtr(d) => d,
@@ -642,12 +679,12 @@ impl<'a, D, A> From<DocBuilder<'a, D, A>> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-pub trait DocPtr<'a, A>: Deref<Target = Doc<'a, Self, A>> + Sized
+pub trait DocPtr<'a, A>: Deref<Target=DocumentTree<'a, Self>> + Sized
     where
         A: 'a,
 {
-    type ColumnFn: Deref<Target = dyn Fn(usize) -> Self + 'a> + Clone + 'a;
-    type WidthFn: Deref<Target = dyn Fn(isize) -> Self + 'a> + Clone + 'a;
+    type ColumnFn: Deref<Target=dyn Fn(usize) -> Self + 'a> + Clone + 'a;
+    type WidthFn: Deref<Target=dyn Fn(isize) -> Self + 'a> + Clone + 'a;
 }
 
 impl<'a, A> DocPtr<'a, A> for RefDoc<'a, A> {
@@ -693,7 +730,7 @@ impl<'a, D, A> Pretty<'a, D, A> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for Doc<'a, D::Doc, A>
+impl<'a, D, A> Pretty<'a, D, A> for DocumentTree<'a, D::Doc, A>
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -733,7 +770,8 @@ impl<'a, D, A> Pretty<'a, D, A> for &'a str
         D: ?Sized + DocAllocator<'a, A>,
 {
     fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        allocator.text(self)
+        todo!()
+        // allocator.text(self)
     }
 }
 
@@ -764,7 +802,7 @@ pub trait DocAllocator<'a, A = ()>
 {
     type Doc: DocPtr<'a, A>;
 
-    fn alloc(&'a self, doc: Doc<'a, Self::Doc, A>) -> Self::Doc;
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc;
 
     fn alloc_column_fn(
         &'a self,
@@ -786,7 +824,7 @@ pub trait DocAllocator<'a, A = ()>
     /// Allocate an empty document.
     #[inline]
     fn nil(&'a self) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, Doc::Nil.into())
+        DocBuilder(self, DocumentTree::Nil.into())
     }
 
     /// Fails document rendering immediately.
@@ -794,13 +832,13 @@ pub trait DocAllocator<'a, A = ()>
     /// Primarily used to abort rendering inside the left side of `Union`
     #[inline]
     fn fail(&'a self) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, Doc::Fail.into())
+        DocBuilder(self, DocumentTree::Fail.into())
     }
 
     /// Allocate a single hardline.
     #[inline]
     fn hardline(&'a self) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, Doc::Hardline.into())
+        DocBuilder(self, DocumentTree::Hardline.into())
     }
 
     #[inline]
@@ -859,7 +897,7 @@ pub trait DocAllocator<'a, A = ()>
         use std::fmt::Write;
         let mut buf = String::new();
         write!(buf, "{}", data).unwrap();
-        let doc = Doc::OwnedText(buf.into());
+        let doc = DocumentTree::OwnedText(buf.into());
         DocBuilder(self, doc.into()).with_utf8_len()
     }
 
@@ -867,14 +905,14 @@ pub trait DocAllocator<'a, A = ()>
     ///
     /// The given text must not contain line breaks.
     #[inline]
-    fn text<U: Into<Cow<'a, str>>>(&'a self, data: U) -> DocBuilder<'a, Self, A> {
+    fn text<U: Into<Cow<'static, str>>>(&'a self, data: U) -> DocBuilder<'a, Self, A> {
         let data: Cow<_> = data.into();
         let doc = if data.is_empty() {
-            Doc::Nil.into()
+            DocumentTree::Nil.into()
         } else {
             match data {
-                Cow::Owned(t) => Doc::OwnedText(t.into()).into(),
-                Cow::Borrowed(t) => Doc::BorrowedText(t).into(),
+                Cow::Owned(t) => DocumentTree::OwnedText(t.into()).into(),
+                Cow::Borrowed(t) => DocumentTree::BorrowedText(t).into(),
             }
         };
         DocBuilder(self, doc).with_utf8_len()
@@ -933,7 +971,7 @@ pub trait DocAllocator<'a, A = ()>
     /// ```
     #[inline]
     fn column(&'a self, f: impl Fn(usize) -> Self::Doc + 'a) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, Doc::Column(self.alloc_column_fn(f)).into())
+        DocBuilder(self, DocumentTree::Column(self.alloc_column_fn(f)).into())
     }
 
     /// Allocate a document that acts differently based on the current nesting level
@@ -950,7 +988,7 @@ pub trait DocAllocator<'a, A = ()>
     /// ```
     #[inline]
     fn nesting(&'a self, f: impl Fn(usize) -> Self::Doc + 'a) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, Doc::Nesting(self.alloc_column_fn(f)).into())
+        DocBuilder(self, DocumentTree::Nesting(self.alloc_column_fn(f)).into())
     }
 
     /// Reflows `text` inserting `softline` in place of any whitespace
@@ -972,7 +1010,7 @@ pub enum BuildDoc<'a, D, A>
         D: DocPtr<'a, A>,
 {
     DocPtr(D),
-    Doc(Doc<'a, D, A>),
+    Doc(DocumentTree<'a, D, A>),
 }
 
 impl<'a, D, A> Default for BuildDoc<'a, D, A>
@@ -980,7 +1018,7 @@ impl<'a, D, A> Default for BuildDoc<'a, D, A>
         D: DocPtr<'a, A>,
 {
     fn default() -> Self {
-        Self::Doc(Doc::default())
+        Self::Doc(DocumentTree::default())
     }
 }
 
@@ -998,7 +1036,7 @@ impl<'a, D, A> Deref for BuildDoc<'a, D, A>
     where
         D: DocPtr<'a, A>,
 {
-    type Target = Doc<'a, D, A>;
+    type Target = DocumentTree<'a, D, A>;
     fn deref(&self) -> &Self::Target {
         match self {
             BuildDoc::DocPtr(d) => d,
@@ -1020,11 +1058,11 @@ impl<'a, A> From<RcDoc<'a, A>> for BuildDoc<'a, RcDoc<'a, A>, A> {
     }
 }
 
-impl<'a, T, A> From<Doc<'a, T, A>> for BuildDoc<'a, T, A>
+impl<'a, T, A> From<DocumentTree<'a, T>> for BuildDoc<'a, T, A>
     where
         T: DocPtr<'a, A>,
 {
-    fn from(s: Doc<'a, T, A>) -> Self {
+    fn from(s: DocumentTree<'a, T>) -> Self {
         BuildDoc::Doc(s)
     }
 }
@@ -1034,7 +1072,7 @@ impl<'a, T, A> From<String> for BuildDoc<'a, T, A>
         T: StaticDoc<'a, A>,
 {
     fn from(s: String) -> Self {
-        BuildDoc::Doc(Doc::text(s))
+        BuildDoc::Doc(DocumentTree::text(s))
     }
 }
 
@@ -1043,7 +1081,8 @@ impl<'a, T, A> From<&'a str> for BuildDoc<'a, T, A>
         T: StaticDoc<'a, A>,
 {
     fn from(s: &'a str) -> Self {
-        BuildDoc::Doc(Doc::text(s))
+        todo!()
+        // BuildDoc::Doc(Doc::text(s))
     }
 }
 
@@ -1052,7 +1091,8 @@ impl<'a, T, A> From<&'a String> for BuildDoc<'a, T, A>
         T: StaticDoc<'a, A>,
 {
     fn from(s: &'a String) -> Self {
-        BuildDoc::Doc(Doc::text(s))
+        todo!()
+        // BuildDoc::Doc(Doc::text(s))
     }
 }
 
@@ -1064,7 +1104,7 @@ impl<'a, T, A, S> From<Option<S>> for BuildDoc<'a, T, A>
     fn from(s: Option<S>) -> Self {
         match s {
             Some(s) => s.into(),
-            None => BuildDoc::Doc(Doc::Nil),
+            None => BuildDoc::Doc(DocumentTree::Nil),
         }
     }
 }
@@ -1108,8 +1148,8 @@ impl<'a, D, A> DocBuilder<'a, D, A>
 {
     fn with_utf8_len(self) -> Self {
         let s = match &*self {
-            Doc::OwnedText(s) => &s[..],
-            Doc::BorrowedText(s) => s,
+            DocumentTree::OwnedText(s) => &s[..],
+            DocumentTree::BorrowedText(s) => s,
             // Doc::SmallText(s) => s,
             _ => return self,
         };
@@ -1122,7 +1162,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
             let DocBuilder(allocator, _) = self;
             DocBuilder(
                 allocator,
-                Doc::RenderLen(grapheme_len, self.into_doc()).into(),
+                DocumentTree::RenderLen(grapheme_len, self.into_doc()).into(),
             )
         }
     }
@@ -1136,11 +1176,11 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         let DocBuilder(allocator, _) = self;
         let that = that.pretty(allocator);
         match (&*self, &*that) {
-            (Doc::Nil, _) => that,
-            (_, Doc::Nil) => self,
+            (DocumentTree::Nil, _) => that,
+            (_, DocumentTree::Nil) => self,
             _ => DocBuilder(
                 allocator,
-                Doc::Append(
+                DocumentTree::Append(
                     allocator.alloc_cow(self.into()),
                     allocator.alloc_cow(that.into()),
                 )
@@ -1182,7 +1222,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         let that = that.pretty(allocator);
         DocBuilder(
             allocator,
-            Doc::FlatAlt(allocator.alloc_cow(this), allocator.alloc_cow(that.into())).into(),
+            DocumentTree::FlatAlt(allocator.alloc_cow(this), allocator.alloc_cow(that.into())).into(),
         )
     }
 
@@ -1195,14 +1235,14 @@ impl<'a, D, A> DocBuilder<'a, D, A>
     #[inline]
     pub fn group(self) -> DocBuilder<'a, D, A> {
         match *self.1 {
-            Doc::Group(_)
-            | Doc::OwnedText(_)
-            | Doc::BorrowedText(_)
+            DocumentTree::Group(_)
+            | DocumentTree::OwnedText(_)
+            | DocumentTree::BorrowedText(_)
             // | Doc::SmallText(_)
-            | Doc::Nil => self,
+            | DocumentTree::Nil => self,
             _ => {
                 let DocBuilder(allocator, this) = self;
-                DocBuilder(allocator, Doc::Group(allocator.alloc_cow(this)).into())
+                DocBuilder(allocator, DocumentTree::Group(allocator.alloc_cow(this)).into())
             }
         }
     }
@@ -1210,7 +1250,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
     /// Increase the indentation level of this document.
     #[inline]
     pub fn nest(self, offset: isize) -> DocBuilder<'a, D, A> {
-        if let Doc::Nil = &*self.1 {
+        if let DocumentTree::Nil = &*self.1 {
             return self;
         }
         if offset == 0 {
@@ -1219,7 +1259,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         let DocBuilder(allocator, this) = self;
         DocBuilder(
             allocator,
-            Doc::Nest(offset, allocator.alloc_cow(this)).into(),
+            DocumentTree::Nest(offset, allocator.alloc_cow(this)).into(),
         )
     }
 
@@ -1228,7 +1268,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         let DocBuilder(allocator, this) = self;
         DocBuilder(
             allocator,
-            Doc::Annotated(ann, allocator.alloc_cow(this)).into(),
+            DocumentTree::Annotated(ann, allocator.alloc_cow(this)).into(),
         )
     }
 
@@ -1239,7 +1279,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
     {
         let DocBuilder(allocator, this) = self;
         let other = other.into();
-        let doc = Doc::Union(allocator.alloc_cow(this), allocator.alloc_cow(other));
+        let doc = DocumentTree::Union(allocator.alloc_cow(this), allocator.alloc_cow(other));
         DocBuilder(allocator, doc.into())
     }
 
@@ -1413,7 +1453,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         }
     }
 
-    fn into_plain_doc(self) -> Doc<'a, D::Doc, A> {
+    fn into_plain_doc(self) -> DocumentTree<'a, D::Doc, A> {
         match self.1 {
             BuildDoc::DocPtr(_) => unreachable!(),
             BuildDoc::Doc(d) => d,
@@ -1422,9 +1462,10 @@ impl<'a, D, A> DocBuilder<'a, D, A>
 }
 
 /// Newtype wrapper for `&Doc`
-pub struct RefDoc<'a, A = ()>(pub &'a Doc<'a, RefDoc<'a, A>, A>);
+pub struct RefDoc<'a, A = ()>(pub &'a DocumentTree<'a, RefDoc<'a, A>, A>);
 
 impl<A> Copy for RefDoc<'_, A> {}
+
 impl<A> Clone for RefDoc<'_, A> {
     fn clone(&self) -> Self {
         *self
@@ -1441,7 +1482,7 @@ impl<'a, A> fmt::Debug for RefDoc<'a, A>
 }
 
 impl<'a, A> Deref for RefDoc<'a, A> {
-    type Target = Doc<'a, RefDoc<'a, A>, A>;
+    type Target = DocumentTree<'a, RefDoc<'a, A>, A>;
 
     fn deref(&self) -> &Self::Target {
         self.0
@@ -1449,11 +1490,12 @@ impl<'a, A> Deref for RefDoc<'a, A> {
 }
 
 trait DropT {}
+
 impl<T> DropT for T {}
 
 /// An arena which can be used to allocate `Doc` values.
 pub struct Arena<'a, A = ()> {
-    docs: typed_arena::Arena<Doc<'a, RefDoc<'a, A>, A>>,
+    docs: typed_arena::Arena<DocumentTree<'a, RefDoc<'a, A>, A>>,
     column_fns: typed_arena::Arena<Box<dyn DropT>>,
 }
 
@@ -1501,7 +1543,7 @@ impl<'a, D, A> DocAllocator<'a, A> for &'a D
     type Doc = D::Doc;
 
     #[inline]
-    fn alloc(&'a self, doc: Doc<'a, Self::Doc, A>) -> Self::Doc {
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc {
         (**self).alloc(doc)
     }
 
@@ -1524,33 +1566,33 @@ impl<'a, A> DocAllocator<'a, A> for Arena<'a, A> {
     type Doc = RefDoc<'a, A>;
 
     #[inline]
-    fn alloc(&'a self, doc: Doc<'a, Self::Doc, A>) -> Self::Doc {
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc {
         RefDoc(match doc {
             // Return 'static references for common variants to avoid some allocations
-            Doc::Nil => &Doc::Nil,
-            Doc::Hardline => &Doc::Hardline,
-            Doc::Fail => &Doc::Fail,
+            DocumentTree::Nil => &DocumentTree::Nil,
+            DocumentTree::Hardline => &DocumentTree::Hardline,
+            DocumentTree::Fail => &DocumentTree::Fail,
             // line()
-            Doc::FlatAlt(RefDoc(Doc::Hardline), RefDoc(Doc::BorrowedText(" "))) => {
-                &Doc::FlatAlt(RefDoc(&Doc::Hardline), RefDoc(&Doc::BorrowedText(" ")))
+            DocumentTree::FlatAlt(RefDoc(DocumentTree::Hardline), RefDoc(DocumentTree::BorrowedText(" "))) => {
+                &DocumentTree::FlatAlt(RefDoc(&DocumentTree::Hardline), RefDoc(&DocumentTree::BorrowedText(" ")))
             }
             // line_()
-            Doc::FlatAlt(RefDoc(Doc::Hardline), RefDoc(Doc::Nil)) => {
-                &Doc::FlatAlt(RefDoc(&Doc::Hardline), RefDoc(&Doc::Nil))
+            DocumentTree::FlatAlt(RefDoc(DocumentTree::Hardline), RefDoc(DocumentTree::Nil)) => {
+                &DocumentTree::FlatAlt(RefDoc(&DocumentTree::Hardline), RefDoc(&DocumentTree::Nil))
             }
             // softline()
-            Doc::Group(RefDoc(Doc::FlatAlt(
-                                  RefDoc(Doc::Hardline),
-                                  RefDoc(Doc::BorrowedText(" ")),
-                              ))) => &Doc::Group(RefDoc(&Doc::FlatAlt(
-                RefDoc(&Doc::Hardline),
-                RefDoc(&Doc::BorrowedText(" ")),
+            DocumentTree::Group(RefDoc(DocumentTree::FlatAlt(
+                                           RefDoc(DocumentTree::Hardline),
+                                           RefDoc(DocumentTree::BorrowedText(" ")),
+                              ))) => &DocumentTree::Group(RefDoc(&DocumentTree::FlatAlt(
+                RefDoc(&DocumentTree::Hardline),
+                RefDoc(&DocumentTree::BorrowedText(" ")),
             ))),
             // softline_()
-            Doc::Group(RefDoc(Doc::FlatAlt(RefDoc(Doc::Hardline), RefDoc(Doc::Nil)))) => {
-                &Doc::Group(RefDoc(&Doc::FlatAlt(
-                    RefDoc(&Doc::Hardline),
-                    RefDoc(&Doc::Nil),
+            DocumentTree::Group(RefDoc(DocumentTree::FlatAlt(RefDoc(DocumentTree::Hardline), RefDoc(DocumentTree::Nil)))) => {
+                &DocumentTree::Group(RefDoc(&DocumentTree::FlatAlt(
+                    RefDoc(&DocumentTree::Hardline),
+                    RefDoc(&DocumentTree::Nil),
                 )))
             }
             _ => self.docs.alloc(doc),
@@ -1591,7 +1633,7 @@ mod tests {
     #[test]
     fn doc_size() {
         // Safeguard against accidentally growing Doc
-        assert_eq!(8 * 3, std::mem::size_of::<Doc<RefDoc>>());
+        assert_eq!(8 * 3, std::mem::size_of::<DocumentTree<RefDoc>>());
     }
 
     macro_rules! test {
@@ -1921,9 +1963,9 @@ mod tests {
 
     #[test]
     fn fail() {
-        let fail_break: BoxDoc<()> = BoxDoc::fail().flat_alt(Doc::nil());
+        let fail_break: BoxDoc<()> = BoxDoc::fail().flat_alt(DocumentTree::nil());
 
-        let doc = fail_break.append(Doc::text("12345")).group().union("abc");
+        let doc = fail_break.append(DocumentTree::text("12345")).group().union("abc");
 
         test!(5, doc, "12345");
         test!(4, doc, "abc");

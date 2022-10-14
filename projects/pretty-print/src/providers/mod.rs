@@ -74,7 +74,8 @@ impl<'a> PrettyProvider<'a> {
             S: Into<Cow<'i, str>>,
             'i: 'a,
     {
-        self.arena.text(text.into())
+        todo!()
+        // self.arena.text(text.into())
     }
     /// Allocate a document containing the given text.
     pub fn keyword<'i, S>(&'a self, text: S) -> PrettyTree<'a>

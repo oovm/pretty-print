@@ -2,7 +2,7 @@
 //! ideally be layed out onto a single line instead of breaking them up into multiple lines. See
 //! `BlockDoc` for an example
 
-use crate::{docs, Doc, DocAllocator, DocBuilder};
+use crate::{docs, DocumentTree, DocAllocator, DocBuilder};
 
 pub struct Affixes<'doc, D, A>
     where
@@ -122,7 +122,7 @@ impl<'doc, D, A> BlockDoc<'doc, D, A>
                                 if !last
                                     && before
                                         .iter()
-                                        .all(|affixes| matches!(&*affixes.prefix.1, Doc::Nil))
+                                        .all(|affixes| matches!(&*affixes.prefix.1, DocumentTree::Nil))
                                 {
                                     fail_on_multi_line.clone()
                                 } else {
