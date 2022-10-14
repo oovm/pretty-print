@@ -41,9 +41,9 @@ pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated};
 /// The `T` parameter is used to abstract over pointers to `Doc`. See `RefDoc` and `BoxDoc` for how
 /// it is used
 #[derive(Clone)]
-pub enum DocumentTree<'a, T>
+pub enum DocumentTree<T>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
 {
     Nil,
     Append(T, T),
@@ -64,7 +64,7 @@ pub enum DocumentTree<'a, T>
 
 impl<'a, T> Default for DocumentTree<'a, T>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
 {
     fn default() -> Self {
         Self::Nil
@@ -75,7 +75,7 @@ fn append_docs<'a, 'd, T, A>(
     mut doc: &'d DocumentTree<'a, T>,
     consumer: &mut impl FnMut(&'d DocumentTree<'a, T>),
 ) where
-    T: DocPtr<'a>,
+    T: DocPtr,
 {
     loop {
         match doc {
@@ -88,10 +88,10 @@ fn append_docs<'a, 'd, T, A>(
     }
 }
 
-impl<'a, T, A> fmt::Debug for DocumentTree<'a, T>
+impl<'a, T> fmt::Debug for DocumentTree<'a, T>
     where
-        T: DocPtr<'a> + fmt::Debug,
-        A: fmt::Debug,
+        T: DocPtr + fmt::Debug,
+
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let is_line = |doc: &DocumentTree<'a, T>| match doc {
@@ -162,7 +162,7 @@ impl<'a, A> RcDoc<'a, A> {
     }
 }
 
-impl<'a, A> From<DocumentTree<'a, Self>> for RcDoc<'a, A> {
+impl<'a, A> From<DocumentTree<Self>> for RcDoc<'a, A> {
     fn from(doc: DocumentTree<'a, RcDoc<'a, A>, >) -> RcDoc<'a, A> {
         RcDoc::new(doc)
     }
@@ -189,18 +189,18 @@ impl<'a, A> DocAllocator<'a, A> for RcAllocator
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn {
+    ) -> <Self::Doc as DocPtr>::ColumnFn {
         Rc::new(f)
     }
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::WidthFn {
+    ) -> <Self::Doc as DocPtr>::WidthFn {
         Rc::new(f)
     }
 }
 
-impl<'a, A> DocPtr<'a> for RcDoc<'a, A> {
+impl<'a, A> DocPtr for RcDoc<'a, A> {
     type ColumnFn = std::rc::Rc<dyn Fn(usize) -> Self + 'a>;
     type WidthFn = std::rc::Rc<dyn Fn(isize) -> Self + 'a>;
 }
@@ -369,8 +369,8 @@ impl<'a, A> RcDoc<'a, A> {
     }
 }
 
-impl<'a, D, A> DocumentTree<'a, D>
-    where D: DocPtr<'a>
+impl<'a, D> DocumentTree<'a, D>
+    where D: DocPtr
 {
     ///   An empty document.
     #[inline]
@@ -395,7 +395,7 @@ impl<'a, D, A> DocumentTree<'a, D>
     }
 }
 
-impl<'a, D, A> DocumentTree<'a, D>
+impl<'a, D> DocumentTree<'a, D>
     where D: StaticDoc<'a, A>
 {
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
@@ -411,8 +411,8 @@ impl<'a, D, A> DocumentTree<'a, D>
     }
 }
 
-impl<'a, D, A> BuildDoc<'a, D, A>
-    where D: DocPtr<'a>
+impl<'a, D> BuildDoc<'a, D, A>
+    where D: DocPtr
 {
     ///   An empty document.
     #[inline]
@@ -437,7 +437,7 @@ impl<'a, D, A> BuildDoc<'a, D, A>
     }
 }
 
-impl<'a, D, A> BuildDoc<'a, D, A>
+impl<'a, D> BuildDoc<'a, D, A>
     where D: StaticDoc<'a, A>
 {
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
@@ -511,9 +511,8 @@ impl<'a, T, A> DocumentTree<'a, T>
     }
 }
 
-pub trait StaticDoc<'a, A>: DocPtr<'a>
-    where
-        A: 'a,
+pub trait StaticDoc<'a>: DocPtr
+
 {
     type Allocator: DocAllocator<'a, A, Doc=Self> + 'static;
     const ALLOCATOR: &'static Self::Allocator;
@@ -521,7 +520,7 @@ pub trait StaticDoc<'a, A>: DocPtr<'a>
 
 impl<'a, T, A, S> From<S> for DocumentTree<'a, T>
     where
-        T: StaticDoc<'a, A>,
+        T: StaticDoc<'a>,
         S: Into<Cow<'static, str>>,
 {
     fn from(s: S) -> DocumentTree<'a, T> {
@@ -532,7 +531,7 @@ impl<'a, T, A, S> From<S> for DocumentTree<'a, T>
 pub struct PrettyFmt<'a, 'd, T, A>
     where
         A: 'a,
-        T: DocPtr<'a> + 'a,
+        T: DocPtr + 'a,
 {
     doc: &'d DocumentTree<'a, T>,
     width: usize,
@@ -540,7 +539,7 @@ pub struct PrettyFmt<'a, 'd, T, A>
 
 impl<'a, T, A> fmt::Display for PrettyFmt<'a, '_, T, A>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.doc.render_fmt(self.width, f)
@@ -549,7 +548,7 @@ impl<'a, T, A> fmt::Display for PrettyFmt<'a, '_, T, A>
 
 impl<'a, T, A> DocumentTree<'a, T>
     where
-        T: DocPtr<'a> + 'a,
+        T: DocPtr + 'a,
 {
     /// Writes a rendered document to a `std::io::Write` object.
     #[inline]
@@ -596,7 +595,7 @@ impl<'a, T, A> DocumentTree<'a, T>
 
 impl<'a, T> DocumentTree<'a, T>
     where
-        T: DocPtr<'a> + 'a,
+        T: DocPtr + 'a,
 {
     #[inline]
     pub fn render_colored<W>(&self, width: usize, out: W) -> io::Result<()>
@@ -634,7 +633,7 @@ impl<'a, D, A, P> AddAssign<P> for DocBuilder<'a, D, A>
     }
 }
 
-impl<'a, D, A> Deref for DocBuilder<'a, D, A>
+impl<'a, D> Deref for DocBuilder<'a, D, A>
     where
         D: ?Sized + DocAllocator<'a, A>,
 {
@@ -647,7 +646,7 @@ impl<'a, D, A> Deref for DocBuilder<'a, D, A>
     }
 }
 
-impl<'a, D, A> fmt::Debug for DocBuilder<'a, D, A>
+impl<'a, D> fmt::Debug for DocBuilder<'a, D, A>
     where
         D: ?Sized + DocAllocator<'a, A>,
         D::Doc: fmt::Debug,
@@ -669,7 +668,7 @@ impl<'a, A, D> Clone for DocBuilder<'a, D, A>
     }
 }
 
-impl<'a, D, A> From<DocBuilder<'a, D, A>> for BuildDoc<'a, D::Doc, A>
+impl<'a, D> From<DocBuilder<'a, D, A>> for BuildDoc<'a, D::Doc, A>
     where
         D: ?Sized + DocAllocator<'a, A>,
 {
@@ -678,21 +677,20 @@ impl<'a, D, A> From<DocBuilder<'a, D, A>> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-pub trait DocPtr<'a>: Deref<Target=DocumentTree<'a, Self>> + Sized
+pub trait DocPtr: Deref<Target=DocumentTree<Self>> + Sized
 {
     type ColumnFn: Deref<Target=dyn Fn(usize) -> Self + 'a> + Clone + 'a;
     type WidthFn: Deref<Target=dyn Fn(isize) -> Self + 'a> + Clone + 'a;
 }
 
-impl<'a, A> DocPtr<'a> for RefDoc<'a, A> {
+impl<'a, A> DocPtr for RefDoc<'a, A> {
     type ColumnFn = &'a (dyn Fn(usize) -> Self + 'a);
     type WidthFn = &'a (dyn Fn(isize) -> Self + 'a);
 }
 
 /// Trait for types which can be converted to a `Document`
-pub trait Pretty<'a, D, A = ()>
+pub trait Pretty<'a, D>
     where
-        A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
 {
     /// Converts `self` into a document
@@ -717,7 +715,7 @@ impl<'a, A> Pretty<'a, Arena<'a, A>, A> for RefDoc<'a, A>
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for BuildDoc<'a, D::Doc, A>
+impl<'a, D> Pretty<'a, D, A> for BuildDoc<'a, D::Doc, A>
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -727,7 +725,7 @@ impl<'a, D, A> Pretty<'a, D, A> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for DocumentTree<'a, D::Doc>
+impl<'a, D> Pretty<'a, D, A> for DocumentTree<'a, D::Doc>
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -737,7 +735,7 @@ impl<'a, D, A> Pretty<'a, D, A> for DocumentTree<'a, D::Doc>
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for DocBuilder<'a, D, A>
+impl<'a, D> Pretty<'a, D, A> for DocBuilder<'a, D, A>
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -761,7 +759,7 @@ impl<'a, D, A, T> Pretty<'a, D, A> for Option<T>
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for &'a str
+impl<'a, D> Pretty<'a, D, A> for &'a str
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -772,231 +770,23 @@ impl<'a, D, A> Pretty<'a, D, A> for &'a str
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for &'a String
+impl<'a, D> Pretty<'a, D> for &'a String
     where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
+
+        D: ?Sized + DocAllocator<'a>,
 {
     fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
         self[..].pretty(allocator)
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for String
+impl<'a, D> Pretty<'a, D> for String
     where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
+
+        D: ?Sized + DocAllocator<'a>,
 {
     fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
         allocator.text(self)
-    }
-}
-
-/// The `DocAllocator` trait abstracts over a type which can allocate (pointers to) `Doc`.
-pub trait DocAllocator<'a, A = ()>
-    where
-        A: 'a,
-{
-    type Doc: DocPtr<'a>;
-
-    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc>) -> Self::Doc;
-
-    fn alloc_column_fn(
-        &'a self,
-        f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn;
-
-    fn alloc_width_fn(
-        &'a self,
-        f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::WidthFn;
-
-    fn alloc_cow(&'a self, doc: BuildDoc<'a, Self::Doc, A>) -> Self::Doc {
-        match doc {
-            BuildDoc::DocPtr(d) => d,
-            BuildDoc::Doc(d) => self.alloc(d),
-        }
-    }
-
-    /// Allocate an empty document.
-    #[inline]
-    fn nil(&'a self) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, DocumentTree::Nil.into())
-    }
-
-    /// Fails document rendering immediately.
-    ///
-    /// Primarily used to abort rendering inside the left side of `Union`
-    #[inline]
-    fn fail(&'a self) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, DocumentTree::Fail.into())
-    }
-
-    /// Allocate a single hardline.
-    #[inline]
-    fn hardline(&'a self) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, DocumentTree::Hardline.into())
-    }
-
-    #[inline]
-    fn space(&'a self) -> DocBuilder<'a, Self, A> {
-        self.text(" ")
-    }
-
-    /// A line acts like a `\n` but behaves like `space` if it is grouped on a single line.
-    #[inline]
-    fn line(&'a self) -> DocBuilder<'a, Self, A> {
-        self.hardline().flat_alt(self.space())
-    }
-
-    /// Acts like `line` but behaves like `nil` if grouped on a single line
-    ///
-    /// ```
-    /// use pretty::{Doc, RcDoc};
-    ///
-    /// let doc = RcDoc::<()>::group(
-    ///     RcDoc::text("(")
-    ///         .append(
-    ///             RcDoc::line_()
-    ///                 .append(Doc::text("test"))
-    ///                 .append(Doc::line())
-    ///                 .append(Doc::text("test"))
-    ///                 .nest(2),
-    ///         )
-    ///         .append(Doc::line_())
-    ///         .append(Doc::text(")")),
-    /// );
-    /// assert_eq!(doc.pretty(5).to_string(), "(\n  test\n  test\n)");
-    /// assert_eq!(doc.pretty(100).to_string(), "(test test)");
-    /// ```
-    #[inline]
-    fn line_(&'a self) -> DocBuilder<'a, Self, A> {
-        self.hardline().flat_alt(self.nil())
-    }
-
-    /// A `softline` acts like `space` if the document fits the page, otherwise like `line`
-    #[inline]
-    fn softline(&'a self) -> DocBuilder<'a, Self, A> {
-        self.line().group()
-    }
-
-    /// A `softline_` acts like `nil` if the document fits the page, otherwise like `line_`
-    #[inline]
-    fn softline_(&'a self) -> DocBuilder<'a, Self, A> {
-        self.line_().group()
-    }
-
-    /// Allocate a document containing the text `t.to_string()`.
-    ///
-    /// The given text must not contain line breaks.
-    #[inline]
-    fn as_string<U: fmt::Display>(&'a self, data: U) -> DocBuilder<'a, Self, A> {
-        use std::fmt::Write;
-        let mut buf = String::new();
-        write!(buf, "{}", data).unwrap();
-        let doc = DocumentTree::OwnedText(buf.into());
-        DocBuilder(self, doc.into()).with_utf8_len()
-    }
-
-    /// Allocate a document containing the given text.
-    ///
-    /// The given text must not contain line breaks.
-    #[inline]
-    fn text<U: Into<Cow<'static, str>>>(&'a self, data: U) -> DocBuilder<'a, Self, A> {
-        let data: Cow<_> = data.into();
-        let doc = if data.is_empty() {
-            DocumentTree::Nil.into()
-        } else {
-            match data {
-                Cow::Owned(t) => DocumentTree::OwnedText(t.into()).into(),
-                Cow::Borrowed(t) => DocumentTree::BorrowedText(t).into(),
-            }
-        };
-        DocBuilder(self, doc).with_utf8_len()
-    }
-
-    /// Allocate a document concatenating the given documents.
-    #[inline]
-    fn concat<I>(&'a self, docs: I) -> DocBuilder<'a, Self, A>
-        where
-            I: IntoIterator,
-            I::Item: Pretty<'a, Self, A>,
-    {
-        docs.into_iter().fold(self.nil(), |a, b| a.append(b))
-    }
-
-    /// Allocate a document that intersperses the given separator `S` between the given documents
-    /// `[A, B, C, ..., Z]`, yielding `[A, S, B, S, C, S, ..., S, Z]`.
-    ///
-    /// Compare [the `intersperse` method from the `itertools` crate](https://docs.rs/itertools/0.5.9/itertools/trait.Itertools.html#method.intersperse).
-    ///
-    /// NOTE: The separator type, `S` may need to be cloned. Consider using cheaply cloneable ptr
-    /// like `RefDoc` or `RcDoc`
-    #[inline]
-    fn intersperse<I, S>(&'a self, docs: I, separator: S) -> DocBuilder<'a, Self, A>
-        where
-            I: IntoIterator,
-            I::Item: Pretty<'a, Self, A>,
-            S: Pretty<'a, Self, A> + Clone,
-    {
-        let mut result = self.nil();
-        let mut iter = docs.into_iter();
-
-        if let Some(first) = iter.next() {
-            result = result.append(first);
-
-            for doc in iter {
-                result = result.append(separator.clone());
-                result = result.append(doc);
-            }
-        }
-
-        result
-    }
-
-    /// Allocate a document that acts differently based on the position and page layout
-    ///
-    /// ```rust
-    /// use pretty::DocAllocator;
-    ///
-    /// let arena = pretty::Arena::<()>::new();
-    /// let doc = arena.text("prefix ")
-    ///     .append(arena.column(|l| {
-    ///         arena.text("| <- column ").append(arena.as_string(l)).into_doc()
-    ///     }));
-    /// assert_eq!(doc.1.pretty(80).to_string(), "prefix | <- column 7");
-    /// ```
-    #[inline]
-    fn column(&'a self, f: impl Fn(usize) -> Self::Doc + 'a) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, DocumentTree::Column(self.alloc_column_fn(f)).into())
-    }
-
-    /// Allocate a document that acts differently based on the current nesting level
-    ///
-    /// ```rust
-    /// use pretty::DocAllocator;
-    ///
-    /// let arena = pretty::Arena::<()>::new();
-    /// let doc = arena.text("prefix ")
-    ///     .append(arena.nesting(|l| {
-    ///         arena.text("[Nested: ").append(arena.as_string(l)).append("]").into_doc()
-    ///     }).nest(4));
-    /// assert_eq!(doc.1.pretty(80).to_string(), "prefix [Nested: 4]");
-    /// ```
-    #[inline]
-    fn nesting(&'a self, f: impl Fn(usize) -> Self::Doc + 'a) -> DocBuilder<'a, Self, A> {
-        DocBuilder(self, DocumentTree::Nesting(self.alloc_column_fn(f)).into())
-    }
-
-    /// Reflows `text` inserting `softline` in place of any whitespace
-    #[inline]
-    fn reflow(&'a self, text: &'a str) -> DocBuilder<'a, Self, A>
-        where
-            Self: Sized,
-            Self::Doc: Clone,
-            A: Clone,
-    {
-        self.intersperse(text.split(char::is_whitespace), self.softline())
     }
 }
 
@@ -1004,24 +794,24 @@ pub trait DocAllocator<'a, A = ()>
 #[derive(Clone)]
 pub enum BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a>,
+        D: DocPtr,
 {
     DocPtr(D),
     Doc(DocumentTree<'a, D>),
 }
 
-impl<'a, D, A> Default for BuildDoc<'a, D, A>
+impl<'a, D> Default for BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a>,
+        D: DocPtr,
 {
     fn default() -> Self {
         Self::Doc(DocumentTree::default())
     }
 }
 
-impl<'a, D, A> fmt::Debug for BuildDoc<'a, D, A>
+impl<'a, D> fmt::Debug for BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a> + fmt::Debug,
+        D: DocPtr + fmt::Debug,
         A: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1029,9 +819,9 @@ impl<'a, D, A> fmt::Debug for BuildDoc<'a, D, A>
     }
 }
 
-impl<'a, D, A> Deref for BuildDoc<'a, D, A>
+impl<'a, D> Deref for BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a>,
+        D: DocPtr,
 {
     type Target = DocumentTree<'a, D>;
     fn deref(&self) -> &Self::Target {
@@ -1057,7 +847,7 @@ impl<'a, A> From<RcDoc<'a, A>> for BuildDoc<'a, RcDoc<'a, A>, A> {
 
 impl<'a, T, A> From<DocumentTree<'a, T>> for BuildDoc<'a, T, A>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
 {
     fn from(s: DocumentTree<'a, T>) -> Self {
         BuildDoc::Doc(s)
@@ -1095,7 +885,7 @@ impl<'a, T, A> From<&'a String> for BuildDoc<'a, T, A>
 
 impl<'a, T, A, S> From<Option<S>> for BuildDoc<'a, T, A>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
         S: Into<BuildDoc<'a, T, A>>,
 {
     fn from(s: Option<S>) -> Self {
@@ -1138,7 +928,7 @@ macro_rules! docs {
     }}
 }
 
-impl<'a, D, A> DocBuilder<'a, D, A>
+impl<'a, D> DocBuilder<'a, D, A>
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -1532,7 +1322,7 @@ impl<'a, A> Arena<'a, A> {
     }
 }
 
-impl<'a, D, A> DocAllocator<'a, A> for &'a D
+impl<'a, D> DocAllocator<'a, A> for &'a D
     where
         D: ?Sized + DocAllocator<'a, A>,
         A: 'a,
@@ -1547,14 +1337,14 @@ impl<'a, D, A> DocAllocator<'a, A> for &'a D
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn {
+    ) -> <Self::Doc as DocPtr>::ColumnFn {
         (**self).alloc_column_fn(f)
     }
 
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::WidthFn {
+    ) -> <Self::Doc as DocPtr>::WidthFn {
         (**self).alloc_width_fn(f)
     }
 }
@@ -1599,14 +1389,14 @@ impl<'a, A> DocAllocator<'a, A> for Arena<'a, A> {
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn {
+    ) -> <Self::Doc as DocPtr>::ColumnFn {
         self.alloc_any(f)
     }
 
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a>>::WidthFn {
+    ) -> <Self::Doc as DocPtr>::WidthFn {
         self.alloc_any(f)
     }
 }

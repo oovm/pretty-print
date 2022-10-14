@@ -254,7 +254,7 @@ fn append_docs2<'a, 'd, T, A>(
     mut consumer: impl FnMut(&'d DocumentTree<'a, T>),
 ) -> &'d DocumentTree<'a, T>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
 {
     let d = append_docs(rdoc, &mut consumer);
     consumer(d);
@@ -266,7 +266,7 @@ fn append_docs<'a, 'd, T, A>(
     consumer: &mut impl FnMut(&'d DocumentTree<'a, T>),
 ) -> &'d DocumentTree<'a, T>
     where
-        T: DocPtr<'a>,
+        T: DocPtr,
 {
     loop {
         // Since appended documents often appear in sequence on the left side we
@@ -285,7 +285,7 @@ fn append_docs<'a, 'd, T, A>(
 
 pub fn best<'a, W, T, A>(doc: &DocumentTree<'a, T>, width: usize, out: &mut W) -> Result<(), W::Error>
     where
-        T: DocPtr<'a> + 'a,
+        T: DocPtr + 'a,
         for<'b> W: RenderAnnotated<'b, A>,
         W: ?Sized,
 {
@@ -334,7 +334,7 @@ fn write_spaces<W>(spaces: usize, out: &mut W) -> Result<(), W::Error>
 
 struct Best<'d, 'a, T, A>
     where
-        T: DocPtr<'a> + 'a,
+        T: DocPtr + 'a,
 {
     pos: usize,
     bcmds: Vec<Cmd<'d, 'a, T, A>>,
@@ -346,7 +346,7 @@ struct Best<'d, 'a, T, A>
 
 impl<'d, 'a, T, A> Best<'d, 'a, T, A>
     where
-        T: DocPtr<'a> + 'a,
+        T: DocPtr + 'a,
 {
     fn fitting(&mut self, next: &'d DocumentTree<'a, T>, mut pos: usize, ind: usize) -> bool {
         let mut bidx = self.bcmds.len();

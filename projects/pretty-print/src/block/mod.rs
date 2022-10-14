@@ -13,7 +13,7 @@ pub struct Affixes<'doc, D, A>
     nest: bool,
 }
 
-impl<'a, D, A> Clone for Affixes<'a, D, A>
+impl<'a, D> Clone for Affixes<'a, D, A>
     where
         A: Clone,
         D: DocAllocator<'a, A> + 'a,

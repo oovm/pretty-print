@@ -1,4 +1,4 @@
-use crate::{Arena, DocAllocator, Pretty, PrettyPrint};
+use crate::{Arena,  Pretty, PrettyPrint};
 use alloc::borrow::Cow;
 use core::fmt::{Debug, Formatter};
 use termcolor::{Color, ColorSpec};
