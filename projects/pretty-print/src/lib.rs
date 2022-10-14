@@ -43,7 +43,7 @@ pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated};
 #[derive(Clone)]
 pub enum DocumentTree<'a, T>
     where
-        T: DocPtr<'a, ColorSpec>,
+        T: DocPtr<'a>,
 {
     Nil,
     Append(T, T),
@@ -62,9 +62,9 @@ pub enum DocumentTree<'a, T>
     Fail,
 }
 
-impl<'a, T, A> Default for DocumentTree<'a, T>
+impl<'a, T> Default for DocumentTree<'a, T>
     where
-        T: DocPtr<'a, A>,
+        T: DocPtr<'a>,
 {
     fn default() -> Self {
         Self::Nil
@@ -75,7 +75,7 @@ fn append_docs<'a, 'd, T, A>(
     mut doc: &'d DocumentTree<'a, T>,
     consumer: &mut impl FnMut(&'d DocumentTree<'a, T>),
 ) where
-    T: DocPtr<'a, A>,
+    T: DocPtr<'a>,
 {
     loop {
         match doc {
@@ -90,7 +90,7 @@ fn append_docs<'a, 'd, T, A>(
 
 impl<'a, T, A> fmt::Debug for DocumentTree<'a, T>
     where
-        T: DocPtr<'a, A> + fmt::Debug,
+        T: DocPtr<'a> + fmt::Debug,
         A: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -145,7 +145,7 @@ impl<'a, T, A> fmt::Debug for DocumentTree<'a, T>
 }
 
 #[derive(Clone)]
-pub struct RcDoc<'a, A = ()>   (Rc<DocumentTree<'a, RcDoc<'a, A>, A>>);
+pub struct RcDoc<'a, A = ()>   (Rc<DocumentTree<'a, RcDoc<'a, A>, >>);
 
 impl<'a, A> fmt::Debug for RcDoc<'a, A>
     where
@@ -157,19 +157,19 @@ impl<'a, A> fmt::Debug for RcDoc<'a, A>
 }
 
 impl<'a, A> RcDoc<'a, A> {
-    pub fn new(doc: DocumentTree<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
+    pub fn new(doc: DocumentTree<'a, RcDoc<'a, A>, >) -> RcDoc<'a, A> {
         RcDoc(Rc::new(doc))
     }
 }
 
-impl<'a, A> From<DocumentTree<'a, Self, A>> for RcDoc<'a, A> {
-    fn from(doc: DocumentTree<'a, RcDoc<'a, A>, A>) -> RcDoc<'a, A> {
+impl<'a, A> From<DocumentTree<'a, Self>> for RcDoc<'a, A> {
+    fn from(doc: DocumentTree<'a, RcDoc<'a, A>, >) -> RcDoc<'a, A> {
         RcDoc::new(doc)
     }
 }
 
 impl<'a, A> Deref for RcDoc<'a, A> {
-    type Target = DocumentTree<'a, RcDoc<'a, A>, A>;
+    type Target = DocumentTree<'a, RcDoc<'a, A>, >;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -183,24 +183,24 @@ impl<'a, A> DocAllocator<'a, A> for RcAllocator
     type Doc = RcDoc<'a, A>;
 
     #[inline]
-    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc {
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc>) -> Self::Doc {
         RcDoc::new(doc)
     }
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::ColumnFn {
+    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn {
         Rc::new(f)
     }
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::WidthFn {
+    ) -> <Self::Doc as DocPtr<'a>>::WidthFn {
         Rc::new(f)
     }
 }
 
-impl<'a, A> DocPtr<'a, A> for RcDoc<'a, A> {
+impl<'a, A> DocPtr<'a> for RcDoc<'a, A> {
     type ColumnFn = std::rc::Rc<dyn Fn(usize) -> Self + 'a>;
     type WidthFn = std::rc::Rc<dyn Fn(isize) -> Self + 'a>;
 }
@@ -369,8 +369,8 @@ impl<'a, A> RcDoc<'a, A> {
     }
 }
 
-impl<'a, D, A> DocumentTree<'a, D, A>
-    where D: DocPtr<'a, A>
+impl<'a, D, A> DocumentTree<'a, D>
+    where D: DocPtr<'a>
 {
     ///   An empty document.
     #[inline]
@@ -395,7 +395,7 @@ impl<'a, D, A> DocumentTree<'a, D, A>
     }
 }
 
-impl<'a, D, A> DocumentTree<'a, D, A>
+impl<'a, D, A> DocumentTree<'a, D>
     where D: StaticDoc<'a, A>
 {
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
@@ -412,7 +412,7 @@ impl<'a, D, A> DocumentTree<'a, D, A>
 }
 
 impl<'a, D, A> BuildDoc<'a, D, A>
-    where D: DocPtr<'a, A>
+    where D: DocPtr<'a>
 {
     ///   An empty document.
     #[inline]
@@ -511,7 +511,7 @@ impl<'a, T, A> DocumentTree<'a, T>
     }
 }
 
-pub trait StaticDoc<'a, A>: DocPtr<'a, A>
+pub trait StaticDoc<'a, A>: DocPtr<'a>
     where
         A: 'a,
 {
@@ -532,7 +532,7 @@ impl<'a, T, A, S> From<S> for DocumentTree<'a, T>
 pub struct PrettyFmt<'a, 'd, T, A>
     where
         A: 'a,
-        T: DocPtr<'a, A> + 'a,
+        T: DocPtr<'a> + 'a,
 {
     doc: &'d DocumentTree<'a, T>,
     width: usize,
@@ -540,7 +540,7 @@ pub struct PrettyFmt<'a, 'd, T, A>
 
 impl<'a, T, A> fmt::Display for PrettyFmt<'a, '_, T, A>
     where
-        T: DocPtr<'a, A>,
+        T: DocPtr<'a>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.doc.render_fmt(self.width, f)
@@ -549,7 +549,7 @@ impl<'a, T, A> fmt::Display for PrettyFmt<'a, '_, T, A>
 
 impl<'a, T, A> DocumentTree<'a, T>
     where
-        T: DocPtr<'a, A> + 'a,
+        T: DocPtr<'a> + 'a,
 {
     /// Writes a rendered document to a `std::io::Write` object.
     #[inline]
@@ -594,10 +594,9 @@ impl<'a, T, A> DocumentTree<'a, T>
     }
 }
 
-#[cfg(feature = "termcolor")]
-impl<'a, T> DocumentTree<'a, T, ColorSpec>
+impl<'a, T> DocumentTree<'a, T>
     where
-        T: DocPtr<'a, ColorSpec> + 'a,
+        T: DocPtr<'a> + 'a,
 {
     #[inline]
     pub fn render_colored<W>(&self, width: usize, out: W) -> io::Result<()>
@@ -639,7 +638,7 @@ impl<'a, D, A> Deref for DocBuilder<'a, D, A>
     where
         D: ?Sized + DocAllocator<'a, A>,
 {
-    type Target = DocumentTree<'a, D::Doc, A>;
+    type Target = DocumentTree<'a, D::Doc>;
     fn deref(&self) -> &Self::Target {
         match &self.1 {
             BuildDoc::DocPtr(d) => d,
@@ -679,15 +678,13 @@ impl<'a, D, A> From<DocBuilder<'a, D, A>> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-pub trait DocPtr<'a, A>: Deref<Target=DocumentTree<'a, Self>> + Sized
-    where
-        A: 'a,
+pub trait DocPtr<'a>: Deref<Target=DocumentTree<'a, Self>> + Sized
 {
     type ColumnFn: Deref<Target=dyn Fn(usize) -> Self + 'a> + Clone + 'a;
     type WidthFn: Deref<Target=dyn Fn(isize) -> Self + 'a> + Clone + 'a;
 }
 
-impl<'a, A> DocPtr<'a, A> for RefDoc<'a, A> {
+impl<'a, A> DocPtr<'a> for RefDoc<'a, A> {
     type ColumnFn = &'a (dyn Fn(usize) -> Self + 'a);
     type WidthFn = &'a (dyn Fn(isize) -> Self + 'a);
 }
@@ -730,7 +727,7 @@ impl<'a, D, A> Pretty<'a, D, A> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for DocumentTree<'a, D::Doc, A>
+impl<'a, D, A> Pretty<'a, D, A> for DocumentTree<'a, D::Doc>
     where
         A: 'a,
         D: ?Sized + DocAllocator<'a, A>,
@@ -800,19 +797,19 @@ pub trait DocAllocator<'a, A = ()>
     where
         A: 'a,
 {
-    type Doc: DocPtr<'a, A>;
+    type Doc: DocPtr<'a>;
 
-    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc;
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc>) -> Self::Doc;
 
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::ColumnFn;
+    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn;
 
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::WidthFn;
+    ) -> <Self::Doc as DocPtr<'a>>::WidthFn;
 
     fn alloc_cow(&'a self, doc: BuildDoc<'a, Self::Doc, A>) -> Self::Doc {
         match doc {
@@ -1007,15 +1004,15 @@ pub trait DocAllocator<'a, A = ()>
 #[derive(Clone)]
 pub enum BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a, A>,
+        D: DocPtr<'a>,
 {
     DocPtr(D),
-    Doc(DocumentTree<'a, D, A>),
+    Doc(DocumentTree<'a, D>),
 }
 
 impl<'a, D, A> Default for BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a, A>,
+        D: DocPtr<'a>,
 {
     fn default() -> Self {
         Self::Doc(DocumentTree::default())
@@ -1024,7 +1021,7 @@ impl<'a, D, A> Default for BuildDoc<'a, D, A>
 
 impl<'a, D, A> fmt::Debug for BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a, A> + fmt::Debug,
+        D: DocPtr<'a> + fmt::Debug,
         A: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1034,9 +1031,9 @@ impl<'a, D, A> fmt::Debug for BuildDoc<'a, D, A>
 
 impl<'a, D, A> Deref for BuildDoc<'a, D, A>
     where
-        D: DocPtr<'a, A>,
+        D: DocPtr<'a>,
 {
-    type Target = DocumentTree<'a, D, A>;
+    type Target = DocumentTree<'a, D>;
     fn deref(&self) -> &Self::Target {
         match self {
             BuildDoc::DocPtr(d) => d,
@@ -1060,7 +1057,7 @@ impl<'a, A> From<RcDoc<'a, A>> for BuildDoc<'a, RcDoc<'a, A>, A> {
 
 impl<'a, T, A> From<DocumentTree<'a, T>> for BuildDoc<'a, T, A>
     where
-        T: DocPtr<'a, A>,
+        T: DocPtr<'a>,
 {
     fn from(s: DocumentTree<'a, T>) -> Self {
         BuildDoc::Doc(s)
@@ -1098,7 +1095,7 @@ impl<'a, T, A> From<&'a String> for BuildDoc<'a, T, A>
 
 impl<'a, T, A, S> From<Option<S>> for BuildDoc<'a, T, A>
     where
-        T: DocPtr<'a, A>,
+        T: DocPtr<'a>,
         S: Into<BuildDoc<'a, T, A>>,
 {
     fn from(s: Option<S>) -> Self {
@@ -1453,7 +1450,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
         }
     }
 
-    fn into_plain_doc(self) -> DocumentTree<'a, D::Doc, A> {
+    fn into_plain_doc(self) -> DocumentTree<'a, D::Doc> {
         match self.1 {
             BuildDoc::DocPtr(_) => unreachable!(),
             BuildDoc::Doc(d) => d,
@@ -1462,7 +1459,7 @@ impl<'a, D, A> DocBuilder<'a, D, A>
 }
 
 /// Newtype wrapper for `&Doc`
-pub struct RefDoc<'a, A = ()>(pub &'a DocumentTree<'a, RefDoc<'a, A>, A>);
+pub struct RefDoc<'a, A = ()>(pub &'a DocumentTree<'a, RefDoc<'a, A>>);
 
 impl<A> Copy for RefDoc<'_, A> {}
 
@@ -1482,7 +1479,7 @@ impl<'a, A> fmt::Debug for RefDoc<'a, A>
 }
 
 impl<'a, A> Deref for RefDoc<'a, A> {
-    type Target = DocumentTree<'a, RefDoc<'a, A>, A>;
+    type Target = DocumentTree<'a, RefDoc<'a, A>>;
 
     fn deref(&self) -> &Self::Target {
         self.0
@@ -1495,7 +1492,7 @@ impl<T> DropT for T {}
 
 /// An arena which can be used to allocate `Doc` values.
 pub struct Arena<'a, A = ()> {
-    docs: typed_arena::Arena<DocumentTree<'a, RefDoc<'a, A>, A>>,
+    docs: typed_arena::Arena<DocumentTree<'a, RefDoc<'a, A>>>,
     column_fns: typed_arena::Arena<Box<dyn DropT>>,
 }
 
@@ -1543,21 +1540,21 @@ impl<'a, D, A> DocAllocator<'a, A> for &'a D
     type Doc = D::Doc;
 
     #[inline]
-    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc {
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc>) -> Self::Doc {
         (**self).alloc(doc)
     }
 
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::ColumnFn {
+    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn {
         (**self).alloc_column_fn(f)
     }
 
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::WidthFn {
+    ) -> <Self::Doc as DocPtr<'a>>::WidthFn {
         (**self).alloc_width_fn(f)
     }
 }
@@ -1566,7 +1563,7 @@ impl<'a, A> DocAllocator<'a, A> for Arena<'a, A> {
     type Doc = RefDoc<'a, A>;
 
     #[inline]
-    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc, A>) -> Self::Doc {
+    fn alloc(&'a self, doc: DocumentTree<'a, Self::Doc>) -> Self::Doc {
         RefDoc(match doc {
             // Return 'static references for common variants to avoid some allocations
             DocumentTree::Nil => &DocumentTree::Nil,
@@ -1584,7 +1581,7 @@ impl<'a, A> DocAllocator<'a, A> for Arena<'a, A> {
             DocumentTree::Group(RefDoc(DocumentTree::FlatAlt(
                                            RefDoc(DocumentTree::Hardline),
                                            RefDoc(DocumentTree::BorrowedText(" ")),
-                              ))) => &DocumentTree::Group(RefDoc(&DocumentTree::FlatAlt(
+                                       ))) => &DocumentTree::Group(RefDoc(&DocumentTree::FlatAlt(
                 RefDoc(&DocumentTree::Hardline),
                 RefDoc(&DocumentTree::BorrowedText(" ")),
             ))),
@@ -1602,14 +1599,14 @@ impl<'a, A> DocAllocator<'a, A> for Arena<'a, A> {
     fn alloc_column_fn(
         &'a self,
         f: impl Fn(usize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::ColumnFn {
+    ) -> <Self::Doc as DocPtr<'a>>::ColumnFn {
         self.alloc_any(f)
     }
 
     fn alloc_width_fn(
         &'a self,
         f: impl Fn(isize) -> Self::Doc + 'a,
-    ) -> <Self::Doc as DocPtr<'a, A>>::WidthFn {
+    ) -> <Self::Doc as DocPtr<'a>>::WidthFn {
         self.alloc_any(f)
     }
 }
