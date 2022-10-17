@@ -1,12 +1,9 @@
-use crate::{Pretty, PrettyPrint};
+use crate::{DocumentTree, PrettyPrint};
 use alloc::borrow::Cow;
 use core::fmt::{Debug, Formatter};
 use termcolor::{Color, ColorSpec};
 use typed_arena::Arena;
-use crate::DocBuilder;
 
-/// Represents a pretty-printable tree.
-pub type PrettyTree<'a> = DocBuilder<'a, Arena<ColorSpec>, ColorSpec>;
 
 /// Represents a pretty-printable tree provider.
 pub struct PrettyProvider<'a> {
@@ -56,21 +53,21 @@ impl<'a> PrettyProvider<'a> {
 
 impl<'a> PrettyProvider<'a> {
     /// Creates a new pretty-printable tree provider.
-    pub fn nil(&'a self) -> PrettyTree<'a> {
+    pub fn nil(&'a self) -> DocumentTree {
         self.arena.nil()
     }
     /// Creates a new pretty-printable tree provider.
-    pub fn space(&'a self) -> PrettyTree<'a> {
+    pub fn space(&'a self) -> DocumentTree {
         self.arena.space()
     }
     /// Creates a new pretty-printable tree provider.
-    pub fn hardline(&'a self) -> PrettyTree<'a> {
+    pub fn hardline(&'a self) -> DocumentTree {
         self.arena.hardline()
     }
     /// Allocate a document containing the given text.
     ///
     /// The given text must not contain line breaks.
-    pub fn text<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn text<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -79,7 +76,7 @@ impl<'a> PrettyProvider<'a> {
         // self.arena.text(text.into())
     }
     /// Allocate a document containing the given text.
-    pub fn keyword<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn keyword<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -87,7 +84,7 @@ impl<'a> PrettyProvider<'a> {
         self.text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn identifier<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn identifier<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -95,7 +92,7 @@ impl<'a> PrettyProvider<'a> {
         self.operator(text)
     }
     /// Allocate a document containing the given text.
-    pub fn generic<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn generic<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -104,7 +101,7 @@ impl<'a> PrettyProvider<'a> {
     }
 
     /// Allocate a document containing the given text.
-    pub fn variable<'i, S>(&'a self, text: S, mutable: bool) -> PrettyTree<'a>
+    pub fn variable<'i, S>(&'a self, text: S, mutable: bool) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -113,7 +110,7 @@ impl<'a> PrettyProvider<'a> {
     }
 
     /// Allocate a document containing the given text.
-    pub fn argument<'i, S>(&'a self, text: S, mutable: bool) -> PrettyTree<'a>
+    pub fn argument<'i, S>(&'a self, text: S, mutable: bool) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -125,7 +122,7 @@ impl<'a> PrettyProvider<'a> {
         }
     }
     /// Allocate a document containing the given text.
-    pub fn operator<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn operator<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -133,7 +130,7 @@ impl<'a> PrettyProvider<'a> {
         self.text(text).annotate(self.operator.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn string<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn string<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -141,7 +138,7 @@ impl<'a> PrettyProvider<'a> {
         self.text(text).annotate(self.string.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn metadata<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn metadata<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -150,7 +147,7 @@ impl<'a> PrettyProvider<'a> {
     }
 
     /// Allocate a document containing the given text.
-    pub fn number<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn number<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -158,7 +155,7 @@ impl<'a> PrettyProvider<'a> {
         self.text(text).annotate(self.number.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn structure<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn structure<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -166,7 +163,7 @@ impl<'a> PrettyProvider<'a> {
         self.text(text).annotate(self.structure.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn interface<'i, S>(&'a self, text: S) -> PrettyTree<'a>
+    pub fn interface<'i, S>(&'a self, text: S) -> DocumentTree
         where
             S: Into<Cow<'i, str>>,
             'i: 'a,
@@ -178,7 +175,7 @@ impl<'a> PrettyProvider<'a> {
 impl<'a> PrettyProvider<'a> {
     /// Allocate a document concatenating the given documents.
     #[inline]
-    pub fn concat<I>(&'a self, docs: I) -> PrettyTree<'a>
+    pub fn concat<I>(&'a self, docs: I) -> DocumentTree
         where
             I: IntoIterator,
             I::Item: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec>,
@@ -193,7 +190,7 @@ impl<'a> PrettyProvider<'a> {
     /// NOTE: The separator type, `S` may need to be cloned. Consider using cheaply cloneable ptr
     /// like `RefDoc` or `RcDoc`
     #[inline]
-    pub fn intersperse<T, S>(&'a self, terms: &[T], joint: S) -> PrettyTree<'a>
+    pub fn intersperse<T, S>(&'a self, terms: &[T], joint: S) -> DocumentTree
         where
             T: PrettyPrint,
             S: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec> + Clone,
@@ -208,7 +205,7 @@ impl<'a> PrettyProvider<'a> {
     /// NOTE: The separator type, `S` may need to be cloned. Consider using cheaply cloneable ptr
     /// like `RefDoc` or `RcDoc`
     #[inline]
-    pub fn join<T>(&'a self, terms: &[T], joint: &'static str) -> PrettyTree<'a>
+    pub fn join<T>(&'a self, terms: &[T], joint: &'static str) -> DocumentTree
         where
             T: PrettyPrint,
     {

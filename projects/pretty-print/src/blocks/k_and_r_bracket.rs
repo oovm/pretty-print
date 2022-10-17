@@ -31,9 +31,9 @@ impl KAndRBracket {
         &self,
         items: &[I],
         allocator: &'a PrettyProvider<'a>,
-        inline_join: PrettyTree<'a>,
-        block_join: PrettyTree<'a>,
-    ) -> PrettyTree<'a>
+        inline_join: DocumentTree,
+        block_join: DocumentTree,
+    ) -> DocumentTree
         where
             I: PrettyPrint,
     {

@@ -14,7 +14,7 @@ mod traits;
 
 use core::fmt::{Debug, Formatter};
 pub use crate::{
-    providers::{PrettyProvider, PrettyTree},
+    providers::{PrettyProvider},
     traits::PrettyPrint,
     blocks::k_and_r_bracket::KAndRBracket,
 };
@@ -295,108 +295,36 @@ impl Add<Self> for DocumentTree {
 }
 
 
-/// Trait for types which can be converted to a `Document`
-pub trait Pretty<'a, D>
+impl<T> From<Option<T>> for DocumentTree
     where
-        D: ?Sized + DocAllocator<'a, A>,
-{
-    /// Converts `self` into a document
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A>;
-}
+        DocumentTree: From<T>,
 
-impl<'a, A> Pretty<'a, RcAllocator, A> for RcDoc<'a, A>
-    where
-        A: 'a,
 {
-    fn pretty(self, allocator: &'a RcAllocator) -> DocBuilder<'a, RcAllocator, A> {
-        DocBuilder(allocator, self.into())
-    }
-}
-
-impl<'a, A> Pretty<'a, Arena<'a, A>, A> for RefDoc<'a, A>
-    where
-        A: 'a,
-{
-    fn pretty(self, allocator: &'a Arena<'a, A>) -> DocBuilder<'a, Arena<'a, A>, A> {
-        DocBuilder(allocator, self.into())
-    }
-}
-
-impl<'a, D> Pretty<'a, D, A> for BuildDoc<'a, D::Doc, A>
-    where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        DocBuilder(allocator, self)
-    }
-}
-
-impl<'a, D> Pretty<'a, D, A> for DocumentTree<'a, D::Doc>
-    where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        DocBuilder(allocator, self.into())
-    }
-}
-
-impl<'a, D> Pretty<'a, D, A> for DocBuilder<'a, D, A>
-    where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
-{
-    fn pretty(self, _: &'a D) -> DocBuilder<'a, D, A> {
-        self
-    }
-}
-
-impl<'a, D, A, T> Pretty<'a, D, A> for Option<T>
-    where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
-        T: Pretty<'a, D, A>,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        match self {
-            Some(x) => x.pretty(allocator),
-            None => allocator.nil(),
+    fn from(x: Option<T>) -> Self {
+        match x {
+            Some(x) => x.into(),
+            None => DocumentTree::Nil,
         }
     }
 }
 
-impl<'a, D> Pretty<'a, D, A> for &'a str
-    where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        todo!()
-        // allocator.text(self)
+impl From<()> for DocumentTree {
+    fn from(_: ()) -> Self {
+        DocumentTree::Nil
     }
 }
 
-impl<'a, D> Pretty<'a, D> for &'a String
-    where
-
-        D: ?Sized + DocAllocator<'a>,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        self[..].pretty(allocator)
+impl From<&'static str> for DocumentTree {
+    fn from(s: &'static str) -> Self {
+        DocumentTree::StaticText(s)
     }
 }
 
-impl<'a, D> Pretty<'a, D> for String
-    where
-
-        D: ?Sized + DocAllocator<'a>,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        allocator.text(self)
+impl From<String> for DocumentTree {
+    fn from(s: String) -> Self {
+        DocumentTree::Text(Rc::from(s))
     }
 }
-
 
 /// Concatenates a number of documents (or values that can be converted into a document via the
 /// `Pretty` trait, like `&str`)
@@ -430,10 +358,7 @@ macro_rules! docs {
     }}
 }
 
-impl<'a, D> DocBuilder<'a, D, A>
-    where
-        A: 'a,
-        D: ?Sized + DocAllocator<'a, A>,
+impl DocumentTree
 {
     fn with_utf8_len(self) -> Self {
         let s = match &*self {
@@ -458,9 +383,9 @@ impl<'a, D> DocBuilder<'a, D, A>
 
     /// Append the given document after this document.
     #[inline]
-    pub fn append<E>(self, that: E) -> DocBuilder<'a, D, A>
+    pub fn append<E>(self, that: E) -> Self
         where
-            E: Pretty<'a, D, A>,
+            E: Pretty,
     {
         let DocBuilder(allocator, _) = self;
         let that = that.pretty(allocator);
@@ -503,9 +428,9 @@ impl<'a, D> DocBuilder<'a, D, A>
     /// assert_eq!(doc.1.pretty(8).to_string(), "let x\nx");
     /// ```
     #[inline]
-    pub fn flat_alt<E>(self, that: E) -> DocBuilder<'a, D, A>
+    pub fn flat_alt<E>(self, that: E) -> Self
         where
-            E: Pretty<'a, D, A>,
+            E: Pretty
     {
         let DocBuilder(allocator, this) = self;
         let that = that.pretty(allocator);
