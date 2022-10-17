@@ -41,24 +41,48 @@ pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated};
 /// The `T` parameter is used to abstract over pointers to `Doc`. See `RefDoc` and `BoxDoc` for how
 /// it is used
 #[derive(Clone)]
-pub enum DocumentTree<T>
-    where
-        T: DocPtr,
+pub enum DocumentTree
 {
     Nil,
-    Append(T, T),
-    Group(T),
-    FlatAlt(T, T),
-    Nest(isize, T),
+    Append {
+        base: Box<DocumentTree>,
+        rest: Box<DocumentTree>,
+    },
+    Group {
+        items: Box<DocumentTree>,
+    },
+    FlatAlt {
+        flat: Box<DocumentTree>,
+        alt: Box<DocumentTree>,
+    },
+    Nest {
+        space: isize,
+        doc: Box<DocumentTree>,
+    },
     Hardline,
     // Stores the length of a string document that is not just ascii
-    RenderLen(usize, T),
-    OwnedText(Box<str>),
+    RenderLen {
+        len: usize,
+        doc: Box<DocumentTree>,
+    },
+    OwnedText {
+        text: Box<str>,
+    },
     BorrowedText(&'static str),
-    Annotated(ColorSpec, T),
-    Union(T, T),
-    Column(T::ColumnFn),
-    Nesting(T::ColumnFn),
+    Annotated {
+        color: ColorSpec,
+        doc: Box<DocumentTree>,
+    },
+    Union {
+        left: Box<DocumentTree>,
+        right: Box<DocumentTree>,
+    },
+    Column {
+        column: fn(usize) -> Self,
+    },
+    Nesting {
+        nesting: fn(usize) -> Self,
+    },
     Fail,
 }
 
@@ -677,11 +701,6 @@ impl<'a, D> From<DocBuilder<'a, D, A>> for BuildDoc<'a, D::Doc, A>
     }
 }
 
-pub trait DocPtr: Deref<Target=DocumentTree<Self>> + Sized
-{
-    type ColumnFn: Deref<Target=dyn Fn(usize) -> Self + 'a> + Clone + 'a;
-    type WidthFn: Deref<Target=dyn Fn(isize) -> Self + 'a> + Clone + 'a;
-}
 
 impl<'a, A> DocPtr for RefDoc<'a, A> {
     type ColumnFn = &'a (dyn Fn(usize) -> Self + 'a);
@@ -1245,34 +1264,6 @@ impl<'a, D> DocBuilder<'a, D, A>
             BuildDoc::DocPtr(_) => unreachable!(),
             BuildDoc::Doc(d) => d,
         }
-    }
-}
-
-/// Newtype wrapper for `&Doc`
-pub struct RefDoc<'a, A = ()>(pub &'a DocumentTree<'a, RefDoc<'a, A>>);
-
-impl<A> Copy for RefDoc<'_, A> {}
-
-impl<A> Clone for RefDoc<'_, A> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<'a, A> fmt::Debug for RefDoc<'a, A>
-    where
-        A: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'a, A> Deref for RefDoc<'a, A> {
-    type Target = DocumentTree<'a, RefDoc<'a, A>>;
-
-    fn deref(&self) -> &Self::Target {
-        self.0
     }
 }
 

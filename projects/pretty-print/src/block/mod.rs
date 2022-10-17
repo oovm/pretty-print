@@ -2,7 +2,7 @@
 //! ideally be layed out onto a single line instead of breaking them up into multiple lines. See
 //! `BlockDoc` for an example
 
-use crate::{docs, DocumentTree, DocAllocator, DocBuilder};
+use crate::{docs, DocumentTree,  DocBuilder};
 
 pub struct Affixes<'doc, D, A>
     where
