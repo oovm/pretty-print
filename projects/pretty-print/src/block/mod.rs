@@ -5,19 +5,13 @@
 use crate::{docs, DocumentTree,  DocBuilder};
 
 pub struct Affixes<'doc, D, A>
-    where
-        D: DocAllocator<'doc, A>,
 {
     prefix: DocBuilder<'doc, D, A>,
     suffix: DocBuilder<'doc, D, A>,
     nest: bool,
 }
 
-impl<'a, D> Clone for Affixes<'a, D, A>
-    where
-        A: Clone,
-        D: DocAllocator<'a, A> + 'a,
-        D::Doc: Clone,
+impl<'a, D> Clone for Affixes<'a, D>
 {
     fn clone(&self) -> Self {
         Affixes {
@@ -29,8 +23,6 @@ impl<'a, D> Clone for Affixes<'a, D, A>
 }
 
 impl<'doc, D, A> Affixes<'doc, D, A>
-    where
-        D: DocAllocator<'doc, A>,
 {
     pub fn new(prefix: DocBuilder<'doc, D, A>, suffix: DocBuilder<'doc, D, A>) -> Self {
         Affixes {

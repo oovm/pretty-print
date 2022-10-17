@@ -3,7 +3,7 @@ use std::{cmp, fmt, io};
 #[cfg(feature = "termcolor")]
 use termcolor::{ColorSpec, WriteColor};
 
-use crate::{DocumentTree, DocPtr};
+use crate::{DocumentTree};
 
 /// Trait representing the operations necessary to render a document
 pub trait Render {
@@ -83,16 +83,16 @@ impl<W> Render for FmtWrite<W>
 }
 
 /// Trait representing the operations necessary to write an annotated document.
-pub trait RenderAnnotated<'a, A>: Render {
-    fn push_annotation(&mut self, annotation: &'a A) -> Result<(), Self::Error>;
+pub trait RenderAnnotated<'a>: Render {
+    fn push_annotation(&mut self, annotation: &'a ColorSpec) -> Result<(), Self::Error>;
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 
-impl<A, W> RenderAnnotated<'_, A> for IoWrite<W>
+impl<W> RenderAnnotated<'_> for IoWrite<W>
     where
         W: io::Write,
 {
-    fn push_annotation(&mut self, _: &A) -> Result<(), Self::Error> {
+    fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -101,11 +101,11 @@ impl<A, W> RenderAnnotated<'_, A> for IoWrite<W>
     }
 }
 
-impl<A, W> RenderAnnotated<'_, A> for FmtWrite<W>
+impl< W> RenderAnnotated<'_> for FmtWrite<W>
     where
         W: fmt::Write,
 {
-    fn push_annotation(&mut self, _: &A) -> Result<(), Self::Error> {
+    fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -249,12 +249,11 @@ macro_rules! make_spaces {
 pub(crate) const SPACES: &str = make_spaces!(,,,,,,,,,,);
 
 fn append_docs2<'a, 'd, T, A>(
-    ldoc: &'d DocumentTree<'a, T>,
-    rdoc: &'d DocumentTree<'a, T>,
-    mut consumer: impl FnMut(&'d DocumentTree<'a, T>),
-) -> &'d DocumentTree<'a, T>
-    where
-        T: DocPtr,
+    ldoc: &'d DocumentTree,
+    rdoc: &'d DocumentTree,
+    mut consumer: impl FnMut(&'d DocumentTree),
+) -> &'d DocumentTree
+
 {
     let d = append_docs(rdoc, &mut consumer);
     consumer(d);
@@ -262,11 +261,9 @@ fn append_docs2<'a, 'd, T, A>(
 }
 
 fn append_docs<'a, 'd, T, A>(
-    mut doc: &'d DocumentTree<'a, T>,
-    consumer: &mut impl FnMut(&'d DocumentTree<'a, T>),
-) -> &'d DocumentTree<'a, T>
-    where
-        T: DocPtr,
+    mut doc: &'d DocumentTree,
+    consumer: &mut impl FnMut(&'d DocumentTree),
+) -> &'d DocumentTree
 {
     loop {
         // Since appended documents often appear in sequence on the left side we
@@ -283,9 +280,8 @@ fn append_docs<'a, 'd, T, A>(
     }
 }
 
-pub fn best<'a, W, T, A>(doc: &DocumentTree<'a, T>, width: usize, out: &mut W) -> Result<(), W::Error>
+pub fn best<'a, W, T, A>(doc: &DocumentTree, width: usize, out: &mut W) -> Result<(), W::Error>
     where
-        T: DocPtr + 'a,
         for<'b> W: RenderAnnotated<'b, A>,
         W: ?Sized,
 {
@@ -309,7 +305,7 @@ enum Mode {
     Flat,
 }
 
-type Cmd<'d, 'a, T, A> = (usize, Mode, &'d DocumentTree<'a, T>);
+type Cmd<'d, 'a, T, A> = (usize, Mode, &'d DocumentTree);
 
 fn write_newline<W>(ind: usize, out: &mut W) -> Result<(), W::Error>
     where
@@ -333,22 +329,18 @@ fn write_spaces<W>(spaces: usize, out: &mut W) -> Result<(), W::Error>
 }
 
 struct Best<'d, 'a, T, A>
-    where
-        T: DocPtr + 'a,
 {
     pos: usize,
     bcmds: Vec<Cmd<'d, 'a, T, A>>,
-    fcmds: Vec<&'d DocumentTree<'a, T>>,
+    fcmds: Vec<&'d DocumentTree>,
     annotation_levels: Vec<usize>,
     width: usize,
     temp_arena: &'d typed_arena::Arena<T>,
 }
 
 impl<'d, 'a, T, A> Best<'d, 'a, T, A>
-    where
-        T: DocPtr + 'a,
 {
-    fn fitting(&mut self, next: &'d DocumentTree<'a, T>, mut pos: usize, ind: usize) -> bool {
+    fn fitting(&mut self, next: &'d DocumentTree, mut pos: usize, ind: usize) -> bool {
         let mut bidx = self.bcmds.len();
         self.fcmds.clear(); // clear from previous calls from best
         self.fcmds.push(next);
@@ -385,13 +377,13 @@ impl<'d, 'a, T, A> Best<'d, 'a, T, A>
                             return false;
                         }
                     }
-                    DocumentTree::BorrowedText(str) => {
+                    DocumentTree::StaticText(str) => {
                         pos += str.len();
                         if pos > self.width {
                             return false;
                         }
                     }
-                    DocumentTree::OwnedText(ref str) => {
+                    DocumentTree::Text(ref str) => {
                         pos += str.len();
                         if pos > self.width {
                             return false;
@@ -491,12 +483,12 @@ impl<'d, 'a, T, A> Best<'d, 'a, T, A>
                         }
                     }
                     DocumentTree::RenderLen(len, ref doc) => match **doc {
-                        DocumentTree::OwnedText(ref s) => {
+                        DocumentTree::Text(ref s) => {
                             out.write_str_all(s)?;
                             self.pos += len;
                             fits &= self.pos <= self.width;
                         }
-                        DocumentTree::BorrowedText(s) => {
+                        DocumentTree::StaticText(s) => {
                             out.write_str_all(s)?;
                             self.pos += len;
                             fits &= self.pos <= self.width;
@@ -508,12 +500,12 @@ impl<'d, 'a, T, A> Best<'d, 'a, T, A>
                         // }
                         _ => unreachable!(),
                     },
-                    DocumentTree::OwnedText(ref s) => {
+                    DocumentTree::Text(ref s) => {
                         out.write_str_all(s)?;
                         self.pos += s.len();
                         fits &= self.pos <= self.width;
                     }
-                    DocumentTree::BorrowedText(s) => {
+                    DocumentTree::StaticText(s) => {
                         out.write_str_all(s)?;
                         self.pos += s.len();
                         fits &= self.pos <= self.width;

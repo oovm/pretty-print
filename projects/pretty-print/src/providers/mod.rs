@@ -1,15 +1,16 @@
-use crate::{Arena,  Pretty, PrettyPrint};
+use crate::{Pretty, PrettyPrint};
 use alloc::borrow::Cow;
 use core::fmt::{Debug, Formatter};
 use termcolor::{Color, ColorSpec};
+use typed_arena::Arena;
 use crate::DocBuilder;
 
 /// Represents a pretty-printable tree.
-pub type PrettyTree<'a> = DocBuilder<'a, Arena<'a, ColorSpec>, ColorSpec>;
+pub type PrettyTree<'a> = DocBuilder<'a, Arena<ColorSpec>, ColorSpec>;
 
 /// Represents a pretty-printable tree provider.
 pub struct PrettyProvider<'a> {
-    arena: Arena<'a, ColorSpec>,
+    arena: Arena<ColorSpec>,
     keyword: ColorSpec,
     string: ColorSpec,
     number: ColorSpec,
