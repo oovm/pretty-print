@@ -6,7 +6,7 @@ use typed_arena::Arena;
 
 
 /// Represents a pretty-printable tree provider.
-pub struct PrettyProvider<'a> {
+pub struct PrettyProvider {
     arena: Arena<ColorSpec>,
     keyword: ColorSpec,
     string: ColorSpec,
@@ -21,13 +21,13 @@ pub struct PrettyProvider<'a> {
     interface: ColorSpec,
 }
 
-impl<'a> Debug for PrettyProvider<'a> {
+impl<'a> Debug for PrettyProvider {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PrettyProvider").finish()
     }
 }
 
-impl<'a> PrettyProvider<'a> {
+impl PrettyProvider {
     /// Creates a new pretty-printable tree provider.
     pub fn new() -> Self {
         let argument = Color::Rgb(239, 112, 117);
@@ -51,18 +51,18 @@ impl<'a> PrettyProvider<'a> {
     }
 }
 
-impl<'a> PrettyProvider<'a> {
+impl<'a> PrettyProvider {
     /// Creates a new pretty-printable tree provider.
     pub fn nil(&'a self) -> DocumentTree {
-        self.arena.nil()
+        todo!()
     }
     /// Creates a new pretty-printable tree provider.
     pub fn space(&'a self) -> DocumentTree {
-        self.arena.space()
+        todo!()
     }
     /// Creates a new pretty-printable tree provider.
     pub fn hardline(&'a self) -> DocumentTree {
-        self.arena.hardline()
+        todo!()
     }
     /// Allocate a document containing the given text.
     ///
@@ -172,7 +172,7 @@ impl<'a> PrettyProvider<'a> {
     }
 }
 
-impl<'a> PrettyProvider<'a> {
+impl<'a> PrettyProvider {
     /// Allocate a document concatenating the given documents.
     #[inline]
     pub fn concat<I>(&'a self, docs: I) -> DocumentTree

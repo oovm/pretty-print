@@ -50,12 +50,15 @@ pub enum DocumentTree
         base: Rc<Self>,
         rest: Rc<Self>,
     },
+    // Sequence {
+    //     items: Vec<Self>,
+    // },
     Group {
         items: Rc<Self>,
     },
     FlatAlt {
-        flat: Rc<Self>,
-        alt: Rc<Self>,
+        block: Rc<Self>,
+        inline: Rc<Self>,
     },
     Nest {
         space: isize,
@@ -93,16 +96,16 @@ impl Default for DocumentTree
     }
 }
 
-fn append_docs<'a, 'd, T, A>(
-    mut doc: &'d DocumentTree,
-    consumer: &mut impl FnMut(&'d DocumentTree),
+fn append_docs(
+    mut doc: &DocumentTree,
+    consumer: &mut impl FnMut(&DocumentTree),
 )
 {
     loop {
         match doc {
-            DocumentTree::Append(l, r) => {
-                append_docs(l, consumer);
-                doc = r;
+            DocumentTree::Append { base, rest } => {
+                append_docs(base, consumer);
+                doc = rest;
             }
             _ => break consumer(doc),
         }
@@ -113,20 +116,20 @@ impl Debug for DocumentTree
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let is_line = |doc: &DocumentTree| match doc {
-            DocumentTree::FlatAlt(x, y) => {
-                matches!((&**x, &**y), (DocumentTree::Hardline, DocumentTree::StaticText(" ")))
+            DocumentTree::FlatAlt { block: flat, inline: alt } => {
+                matches!((&**flat, &**alt), (DocumentTree::Hardline, DocumentTree::StaticText(" ")))
             }
             _ => false,
         };
         let is_line_ = |doc: &DocumentTree| match doc {
-            DocumentTree::FlatAlt(x, y) => {
-                matches!((&**x, &**y), (DocumentTree::Hardline, DocumentTree::Nil))
+            DocumentTree::FlatAlt { block: flat, inline: alt } => {
+                matches!((&**flat, &**alt), (DocumentTree::Hardline, DocumentTree::Nil))
             }
             _ => false,
         };
         match self {
             DocumentTree::Nil => f.debug_tuple("Nil").finish(),
-            DocumentTree::Append(..) => {
+            DocumentTree::Append { base, rest } => {
                 let mut f = f.debug_list();
                 append_docs(self, &mut |doc| {
                     f.entry(doc);
@@ -135,26 +138,25 @@ impl Debug for DocumentTree
             }
             _ if is_line(self) => f.debug_tuple("Line").finish(),
             _ if is_line_(self) => f.debug_tuple("Line_").finish(),
-            DocumentTree::FlatAlt(ref x, ref y) => f.debug_tuple("FlatAlt").field(x).field(y).finish(),
-            DocumentTree::Group(ref doc) => {
+            DocumentTree::FlatAlt { block, inline } => f.debug_tuple("FlatAlt").field(block).field(inline).finish(),
+            DocumentTree::Group { items } => {
                 if is_line(self) {
                     return f.debug_tuple("SoftLine").finish();
                 }
                 if is_line_(self) {
-                    return f.debug_tuple("SoftLine_").finish();
+                    return f.debug_tuple("SoftLine?").finish();
                 }
-                f.debug_tuple("Group").field(doc).finish()
+                f.debug_tuple("Group").field(items).finish()
             }
-            DocumentTree::Nest(off, ref doc) => f.debug_tuple("Nest").field(&off).field(doc).finish(),
+            DocumentTree::Nest { space, doc } => f.debug_tuple("Nest").field(&space).field(doc).finish(),
             DocumentTree::Hardline => f.debug_tuple("Hardline").finish(),
-            DocumentTree::RenderLen(_, d) => d.fmt(f),
-            DocumentTree::Text(ref s) => s.fmt(f),
-            DocumentTree::StaticText(ref s) => s.fmt(f),
-            // Doc::SmallText(ref s) => s.fmt(f),
-            DocumentTree::Annotated(ref ann, ref doc) => {
-                f.debug_tuple("Annotated").field(ann).field(doc).finish()
+            DocumentTree::RenderLen {  doc,.. } => doc.fmt(f),
+            DocumentTree::Text(s) => s.fmt(f),
+            DocumentTree::StaticText(s) => s.fmt(f),
+            DocumentTree::Annotated { color, doc } => {
+                f.debug_tuple("Annotated").field(color).field(doc).finish()
             }
-            DocumentTree::Union(ref l, ref r) => f.debug_tuple("Union").field(l).field(r).finish(),
+            DocumentTree::Union { left, right } => f.debug_tuple("Union").field(left).field(right).finish(),
             DocumentTree::Column(_) => f.debug_tuple("Column(..)").finish(),
             DocumentTree::Nesting(_) => f.debug_tuple("Nesting(..)").finish(),
             DocumentTree::Fail => f.debug_tuple("Fail").finish(),
@@ -193,23 +195,6 @@ impl DocumentTree
             Cow::Borrowed(s) => DocumentTree::StaticText(s),
             Cow::Owned(s) => DocumentTree::Text(Rc::new(s)),
         }
-    }
-
-    fn flat_alt<D>(self, doc: D) -> Self
-    {
-        todo!()
-        // DocumentTree(T::ALLOCATOR, self.into())
-        //     .flat_alt(doc)
-        //     .into_plain_doc()
-    }
-}
-
-impl<'a, T, A, S> From<S> for DocumentTree
-    where
-        S: Into<Cow<'static, str>>,
-{
-    fn from(s: S) -> DocumentTree {
-        DocumentTree::text(s)
     }
 }
 
@@ -361,9 +346,9 @@ macro_rules! docs {
 impl DocumentTree
 {
     fn with_utf8_len(self) -> Self {
-        let s = match &*self {
-            DocumentTree::Text(s) => &s[..],
-            DocumentTree::StaticText(s) => s,
+        let s = match &self {
+            Self::Text(s) => s.as_ref(),
+            Self::StaticText(s) => s,
             // Doc::SmallText(s) => s,
             _ => return self,
         };
@@ -373,11 +358,10 @@ impl DocumentTree
             self
         } else {
             let grapheme_len = s.graphemes(true).count();
-            let DocumentTree(allocator, _) = self;
-            DocumentTree(
-                allocator,
-                DocumentTree::RenderLen(grapheme_len, self.into_doc()).into(),
-            )
+            Self::RenderLen {
+                len: grapheme_len,
+                doc: Rc::new(self),
+            }
         }
     }
 
@@ -423,16 +407,16 @@ impl DocumentTree
     /// assert_eq!(doc.1.pretty(8).to_string(), "let x\nx");
     /// ```
     #[inline]
-    pub fn flat_alt<E>(self, that: E) -> Self
+    pub fn flat_alt<E>(self, flat: E) -> Self
         where
             E: Into<DocumentTree>
     {
-        let DocumentTree(allocator, this) = self;
-        let that = that.pretty(allocator);
-        DocumentTree(
-            allocator,
-            DocumentTree::FlatAlt(allocator.alloc_cow(this), allocator.alloc_cow(that.into())).into(),
-        )
+        let rhs = flat.into();
+
+        Self::FlatAlt {
+            block: Rc::new(self),
+            inline: Rc::new(rhs),
+        }
     }
 
     /// Mark this document as a group.
@@ -444,14 +428,14 @@ impl DocumentTree
     #[inline]
     pub fn group(self) -> Self {
         match *self.1 {
-            DocumentTree::Group(_)
-            | DocumentTree::Text(_)
-            | DocumentTree::StaticText(_)
-            // | Doc::SmallText(_)
-            | DocumentTree::Nil => self,
+            Self::Group(_)
+            | Self::Text(_)
+            | Self::StaticText(_)
+            | Self::Nil => self,
             _ => {
-                let DocumentTree(allocator, this) = self;
-                DocumentTree(allocator, DocumentTree::Group(allocator.alloc_cow(this)).into())
+                Self::Group {
+                    items: Rc::new(self),
+                }
             }
         }
     }
@@ -465,20 +449,18 @@ impl DocumentTree
         if offset == 0 {
             return self;
         }
-        let DocumentTree(allocator, this) = self;
-        DocumentTree(
-            allocator,
-            DocumentTree::Nest(offset, allocator.alloc_cow(this)).into(),
-        )
+        Self::Nest {
+            space: offset,
+            doc: Rc::new(self),
+        }
     }
 
     #[inline]
     pub fn annotate(self, ann: ColorSpec) -> Self {
-        let DocumentTree(allocator, this) = self;
-        DocumentTree(
-            allocator,
-            DocumentTree::Annotated(ann, allocator.alloc_cow(this)).into(),
-        )
+        Self::Annotated {
+            color: ann,
+            doc: Rc::new(self),
+        }
     }
 
     #[inline]
@@ -486,10 +468,10 @@ impl DocumentTree
         where
             E: Into<DocumentTree>
     {
-        let DocumentTree(allocator, this) = self;
-        let other = other.into();
-        let doc = DocumentTree::Union(allocator.alloc_cow(this), allocator.alloc_cow(other));
-        DocumentTree(allocator, doc.into())
+        Self::Union {
+            left: Rc::new(self),
+            right: Rc::new(other.into()),
+        }
     }
 
     /// Lays out `self` so with the nesting level set to the current column
@@ -569,17 +551,15 @@ impl DocumentTree
     /// ```
     #[inline]
     pub fn indent(self, adjust: usize) -> Self
-
     {
         let spaces = {
             use crate::render::SPACES;
-            let DocumentTree(allocator, _) = self;
-            let mut doc = allocator.nil();
+            let mut doc = DocumentTree::Nil;
             let mut remaining = adjust;
             while remaining != 0 {
                 let i = SPACES.len().min(remaining);
                 remaining -= i;
-                doc = doc.append(allocator.text(&SPACES[..i]))
+                doc = doc.append(DocumentTree::text(&SPACES[..i]))
             }
             doc
         };
@@ -605,28 +585,31 @@ impl DocumentTree
     pub fn width(self, f: impl Fn(isize) -> Self) -> Self
 
     {
-        let DocumentTree(allocator, this) = self;
-        let f = allocator.alloc_width_fn(f);
-        allocator.column(move |start| {
-            let f = f.clone();
-
-            DocumentTree(allocator, this.clone())
-                .append(allocator.column(move |end| f(end as isize - start as isize)))
-                .into_doc()
-        })
+        todo!()
+        // let f = allocator.alloc_width_fn(f);
+        // allocator.column(move |start| {
+        //     let f = f.clone();
+        //
+        //     DocumentTree(allocator, this.clone())
+        //         .append(allocator.column(move |end| f(end as isize - start as isize)))
+        //         .into_doc()
+        // })
     }
 
     /// Puts `self` between `before` and `after`
     #[inline]
     pub fn enclose<E, F>(self, before: E, after: F) -> Self
         where
-            E: Into<DocumentTree>,
-            F: Into<DocumentTree>,
+            E: Into<Self>,
+            F: Into<Self>,
     {
-        let DocumentTree(allocator, _) = self;
-        DocumentTree(allocator, before.pretty(allocator).1)
-            .append(self)
-            .append(after)
+        Self::Sequence {
+            items: vec![
+                before.into(),
+                self,
+                after.into(),
+            ],
+        }
     }
 
     pub fn single_quotes(self) -> Self {
@@ -651,12 +634,6 @@ impl DocumentTree
         self.enclose("[", "]")
     }
 
-    pub fn into_doc(self) -> D::Doc {
-        match self.1 {
-            BuildDoc::DocPtr(d) => d,
-            BuildDoc::Doc(d) => self.0.alloc(d),
-        }
-    }
 }
 
 

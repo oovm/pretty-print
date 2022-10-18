@@ -30,7 +30,7 @@ impl KAndRBracket {
     pub fn build<'a, I>(
         &self,
         items: &[I],
-        allocator: &'a PrettyProvider<'a>,
+        allocator: &'a PrettyProvider,
         inline_join: DocumentTree,
         block_join: DocumentTree,
     ) -> DocumentTree
