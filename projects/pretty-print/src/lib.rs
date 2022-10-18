@@ -151,28 +151,25 @@ impl Debug for DocumentTree
             DocumentTree::Nest { space, doc } => f.debug_tuple("Nest").field(&space).field(doc).finish(),
             DocumentTree::Hardline => f.debug_tuple("Hardline").finish(),
             DocumentTree::RenderLen {  doc,.. } => doc.fmt(f),
-            DocumentTree::Text(s) => s.fmt(f),
-            DocumentTree::StaticText(s) => s.fmt(f),
+            DocumentTree::Text(s) => Debug::fmt(s, f),
+            DocumentTree::StaticText(s) => Debug::fmt(s, f),
             DocumentTree::Annotated { color, doc } => {
                 f.debug_tuple("Annotated").field(color).field(doc).finish()
             }
             DocumentTree::Union { left, right } => f.debug_tuple("Union").field(left).field(right).finish(),
-            DocumentTree::Column(_) => f.debug_tuple("Column(..)").finish(),
-            DocumentTree::Nesting(_) => f.debug_tuple("Nesting(..)").finish(),
+            DocumentTree::Column { .. } => f.debug_tuple("Column(..)").finish(),
+            DocumentTree::Nesting { .. } => f.debug_tuple("Nesting(..)").finish(),
             DocumentTree::Fail => f.debug_tuple("Fail").finish(),
         }
     }
 }
 
-impl DocumentTree {
+impl DocumentTree
+{
     #[inline]
     pub fn space() -> Self {
         DocumentTree::StaticText(" ").into()
     }
-}
-
-impl DocumentTree
-{
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
     #[inline]
     pub fn line() -> Self {
@@ -193,7 +190,7 @@ impl DocumentTree
     pub fn text<U: Into<Cow<'static, str>>>(data: U) -> Self {
         match data.into() {
             Cow::Borrowed(s) => DocumentTree::StaticText(s),
-            Cow::Owned(s) => DocumentTree::Text(Rc::new(s)),
+            Cow::Owned(s) => DocumentTree::Text(Rc::from(s)),
         }
     }
 }
@@ -235,10 +232,10 @@ impl DocumentTree
     #[inline]
     pub fn render_raw<W>(&self, width: usize, out: &mut W) -> Result<(), W::Error>
         where
-                for<'b> W: render::RenderAnnotated<'b>,
+                for<'b> W: render::RenderAnnotated,
                 W: ?Sized,
     {
-        render::best(self, width, out)
+        render::best(Rc::new(self.clone()), width, out)
     }
 
     /// Returns a value which implements `std::fmt::Display`
@@ -264,7 +261,7 @@ impl DocumentTree
         where
             W: WriteColor,
     {
-        render::best(self, width, &mut TermColored::new(out))
+        render::best(Rc::new(self.clone()), width, &mut TermColored::new(out))
     }
 }
 
@@ -372,7 +369,7 @@ impl DocumentTree
             E: Into<DocumentTree>
     {
         let rhs = follow.into();
-        match (&*self, &*rhs) {
+        match (&self, &rhs) {
             (DocumentTree::Nil, _) => rhs,
             (_, DocumentTree::Nil) => self,
             _ => Self::Append {
@@ -427,8 +424,8 @@ impl DocumentTree
     /// line.
     #[inline]
     pub fn group(self) -> Self {
-        match *self.1 {
-            Self::Group(_)
+        match self {
+            Self::Group { .. }
             | Self::Text(_)
             | Self::StaticText(_)
             | Self::Nil => self,
@@ -443,8 +440,11 @@ impl DocumentTree
     /// Increase the indentation level of this document.
     #[inline]
     pub fn nest(self, offset: isize) -> Self {
-        if let DocumentTree::Nil = &*self.1 {
-            return self;
+        match self {
+            Self::Nil => {
+                return self;
+            }
+            _ => {}
         }
         if offset == 0 {
             return self;
@@ -497,13 +497,13 @@ impl DocumentTree
     pub fn align(self) -> Self
 
     {
-        let allocator = self.0;
-        allocator.column(move |col| {
-            let self_ = self.clone();
-            allocator
-                .nesting(move |nest| self_.clone().nest(col as isize - nest as isize).into_doc())
-                .into_doc()
-        })
+        todo!()
+        // allocator.column(move |col| {
+        //     let self_ = self.clone();
+        //     allocator
+        //         .nesting(move |nest| self_.clone().nest(col as isize - nest as isize).into_doc())
+        //         .into_doc()
+        // })
     }
 
     /// Lays out `self` with a nesting level set to the current level plus `adjust`.
@@ -603,13 +603,7 @@ impl DocumentTree
             E: Into<Self>,
             F: Into<Self>,
     {
-        Self::Sequence {
-            items: vec![
-                before.into(),
-                self,
-                after.into(),
-            ],
-        }
+        before.into().append(self).append(after.into())
     }
 
     pub fn single_quotes(self) -> Self {

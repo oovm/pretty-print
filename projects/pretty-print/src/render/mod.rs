@@ -84,12 +84,12 @@ impl<W> Render for FmtWrite<W>
 }
 
 /// Trait representing the operations necessary to write an annotated document.
-pub trait RenderAnnotated<'a>: Render {
-    fn push_annotation(&mut self, annotation: &'a ColorSpec) -> Result<(), Self::Error>;
+pub trait RenderAnnotated: Render {
+    fn push_annotation<'a, 'b>(&'a mut self, annotation: &'b ColorSpec) -> Result<(), Self::Error>;
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 
-impl<W> RenderAnnotated<'_> for IoWrite<W>
+impl<W> RenderAnnotated for IoWrite<W>
     where
         W: io::Write,
 {
@@ -102,7 +102,7 @@ impl<W> RenderAnnotated<'_> for IoWrite<W>
     }
 }
 
-impl<W> RenderAnnotated<'_> for FmtWrite<W>
+impl<W> RenderAnnotated for FmtWrite<W>
     where
         W: fmt::Write,
 {
@@ -115,7 +115,6 @@ impl<W> RenderAnnotated<'_> for FmtWrite<W>
     }
 }
 
-#[cfg(feature = "termcolor")]
 pub struct TermColored<W> {
     color_stack: Vec<ColorSpec>,
     upstream: W,
@@ -151,7 +150,7 @@ impl<W> Render for TermColored<W>
     }
 }
 
-impl<W> RenderAnnotated<'_> for TermColored<W>
+impl<W> RenderAnnotated for TermColored<W>
     where
         W: WriteColor,
 {
@@ -189,7 +188,7 @@ impl<'a> BufferWrite<'a> {
 
     fn render<W>(&mut self, render: &mut W) -> Result<(), W::Error>
         where
-            W: RenderAnnotated<'a>,
+            W: RenderAnnotated,
             W: ?Sized,
     {
         let mut start = 0;
@@ -228,12 +227,14 @@ impl Render for BufferWrite<'_> {
     fn fail_doc(&self) -> Self::Error {}
 }
 
-impl<'a> RenderAnnotated<'a> for BufferWrite<'a> {
-    fn push_annotation(&mut self, a: &'a ColorSpec) -> Result<(), Self::Error> {
-        self.annotations
-            .push((self.buffer.len(), Annotation::Push(a)));
-        Ok(())
+impl RenderAnnotated for BufferWrite<'_> {
+    fn push_annotation<'a, 'b>(&'a mut self, annotation: &'b ColorSpec) -> Result<(), Self::Error> {
+        todo!()
+        // self.annotations
+        //     .push((self.buffer.len(), Annotation::Push(annotation)));
+        // Ok(())
     }
+
 
     fn pop_annotation(&mut self) -> Result<(), Self::Error> {
         self.annotations.push((self.buffer.len(), Annotation::Pop));
@@ -251,7 +252,7 @@ pub(crate) const SPACES: &str = make_spaces!(,,,,,,,,,,);
 fn append_docs2(
     ldoc: Rc<DocumentTree>,
     rdoc: Rc<DocumentTree>,
-    mut consumer: impl FnMut( Rc<DocumentTree>),
+    mut consumer: impl FnMut(Rc<DocumentTree>),
 ) -> Rc<DocumentTree>
 
 {
@@ -269,20 +270,20 @@ fn append_docs(
         // Since appended documents often appear in sequence on the left side we
         // gain a slight performance increase by batching these pushes (avoiding
         // to push and directly pop `Append` documents)
-        match *doc {
+        match doc.as_ref() {
             DocumentTree::Append { base, rest } => {
-                let d = append_docs(base, consumer);
+                let d = append_docs(base.clone(), consumer);
                 consumer(d);
-                doc = rest;
+                doc = rest.clone();
             }
             _ => return doc,
         }
     }
 }
 
-pub fn best<'a, W, T, A>(doc: &DocumentTree, width: usize, out: &mut W) -> Result<(), W::Error>
+pub fn best<'a, W>(doc: Rc<DocumentTree>, width: usize, out: &mut W) -> Result<(), W::Error>
     where
-            for<'b> W: RenderAnnotated<'b>,
+        W: RenderAnnotated,
             W: ?Sized,
 {
     Best {
@@ -303,7 +304,7 @@ enum Mode {
     Flat,
 }
 
-type Cmd<'d> = (usize, Mode, &'d DocumentTree);
+type Cmd = (usize, Mode, Rc<DocumentTree>);
 
 fn write_newline<W>(ind: usize, out: &mut W) -> Result<(), W::Error>
     where
@@ -326,16 +327,16 @@ fn write_spaces<W>(spaces: usize, out: &mut W) -> Result<(), W::Error>
     Ok(())
 }
 
-struct Best<'d>
+struct Best
 {
     pos: usize,
-    bcmds: Vec<Cmd<'d>>,
+    bcmds: Vec<Cmd>,
     fcmds: Vec<Rc<DocumentTree>>,
     annotation_levels: Vec<usize>,
     width: usize,
 }
 
-impl<'d> Best<'d>
+impl Best
 {
     fn fitting(&mut self, next: Rc<DocumentTree>, mut pos: usize, ind: usize) -> bool {
         let mut bidx = self.bcmds.len();
@@ -352,18 +353,17 @@ impl<'d> Best<'d>
                     } else {
                         bidx -= 1;
                         mode = Mode::Break;
-                        let out = self.bcmds[bidx].2;
-                        Rc::new(out.clone())
+                        self.bcmds[bidx].2.clone()
                     }
                 }
                 Some(cmd) => cmd,
             };
 
             loop {
-                match *doc {
+                match doc.as_ref() {
                     DocumentTree::Nil => {}
                     DocumentTree::Append { base, rest } => {
-                        doc = append_docs2(base, rest, |doc| self.fcmds.push(doc));
+                        doc = append_docs2(base.clone(), rest.clone(), |doc| self.fcmds.push(doc));
                         continue;
                     }
                     // Newlines inside the group makes it not fit, but those outside lets it
@@ -395,8 +395,8 @@ impl<'d> Best<'d>
                     // }
                     DocumentTree::FlatAlt { block: flat, inline } => {
                         doc = match mode {
-                            Mode::Break => flat,
-                            Mode::Flat => inline,
+                            Mode::Break => flat.clone(),
+                            Mode::Flat => inline.clone(),
                         };
                         continue;
                     }
@@ -425,7 +425,7 @@ impl<'d> Best<'d>
 
     fn best<W>(&mut self, top: usize, out: &mut W) -> Result<bool, W::Error>
         where
-            W: RenderAnnotated<'d>,
+            W: RenderAnnotated,
             W: ?Sized,
     {
         let mut fits = true;
@@ -434,22 +434,22 @@ impl<'d> Best<'d>
             let mut cmd = self.bcmds.pop().unwrap();
             loop {
                 let (ind, mode, doc) = cmd;
-                match *doc {
+                match doc.as_ref() {
                     DocumentTree::Nil => {}
                     DocumentTree::Append { base, rest } => {
-                        cmd.2 = append_docs2(base, rest, |doc| self.bcmds.push((ind, mode, doc)));
+                        cmd.2 = append_docs2(base.clone(), rest.clone(), |doc| self.bcmds.push((ind, mode, doc)));
                         continue;
                     }
                     DocumentTree::FlatAlt { block, inline } => {
                         cmd.2 = match mode {
-                            Mode::Break => block,
-                            Mode::Flat => inline,
+                            Mode::Break => block.clone(),
+                            Mode::Flat => inline.clone(),
                         };
                         continue;
                     }
                     DocumentTree::Group { items } => {
                         if let Mode::Break = mode {
-                            if self.fitting(items, self.pos, ind) {
+                            if self.fitting(items.clone(), self.pos, ind) {
                                 cmd.1 = Mode::Flat;
                             }
                         }
@@ -459,12 +459,12 @@ impl<'d> Best<'d>
                     DocumentTree::Nest { space, doc } => {
                         // Once https://doc.rust-lang.org/std/primitive.usize.html#method.saturating_add_signed is stable
                         // this can be replaced
-                        let new_ind = if space >= 0 {
-                            ind.saturating_add(space as usize)
+                        let new_ind = if *space >= 0 {
+                            ind.saturating_add(*space as usize)
                         } else {
                             ind.saturating_sub(space.unsigned_abs())
                         };
-                        cmd = (new_ind, mode, doc);
+                        cmd = (new_ind, mode, doc.clone());
                         continue;
                     }
                     DocumentTree::Hardline => {
@@ -480,8 +480,8 @@ impl<'d> Best<'d>
                             self.pos = ind;
                         }
                     }
-                    DocumentTree::RenderLen {  } => match **doc {
-                        DocumentTree::Text(ref s) => {
+                    DocumentTree::RenderLen { len, doc } => match doc.as_ref() {
+                        DocumentTree::Text(s) => {
                             out.write_str_all(s)?;
                             self.pos += len;
                             fits &= self.pos <= self.width;
@@ -513,18 +513,18 @@ impl<'d> Best<'d>
                     //     self.pos += s.len();
                     //     fits &= self.pos <= self.width;
                     // }
-                    DocumentTree::Annotated {  } => {
-                        out.push_annotation(ann)?;
+                    DocumentTree::Annotated { color, doc } => {
+                        out.push_annotation(&color)?;
                         self.annotation_levels.push(self.bcmds.len());
-                        cmd.2 = doc;
+                        cmd.2 = doc.clone();
                         continue;
                     }
-                    DocumentTree::Union {  } => {
+                    DocumentTree::Union { left, right } => {
                         let pos = self.pos;
                         let annotation_levels = self.annotation_levels.len();
                         let bcmds = self.bcmds.len();
 
-                        self.bcmds.push((ind, mode, l));
+                        self.bcmds.push((ind, mode, left.clone()));
 
                         let mut buffer = BufferWrite::new();
 
@@ -534,17 +534,17 @@ impl<'d> Best<'d>
                                 self.pos = pos;
                                 self.bcmds.truncate(bcmds);
                                 self.annotation_levels.truncate(annotation_levels);
-                                cmd.2 = r;
+                                cmd.2 = right.clone();
                                 continue;
                             }
                         }
                     }
-                    DocumentTree::Column {  } => {
-                        cmd.2 = self.temp_arena.alloc(f(self.pos));
+                    DocumentTree::Column { column } => {
+                        cmd.2 = Rc::new(column(self.pos));
                         continue;
                     }
-                    DocumentTree::Nesting {  } => {
-                        cmd.2 = self.temp_arena.alloc(f(ind));
+                    DocumentTree::Nesting { nesting } => {
+                        cmd.2 = Rc::new(nesting(self.pos));
                         continue;
                     }
                     DocumentTree::Fail => return Err(out.fail_doc()),
