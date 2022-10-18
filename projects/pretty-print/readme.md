@@ -133,6 +133,6 @@ assert_eq!("\
 
 There's a more efficient pattern that uses the [DocAllocator](trait.DocAllocator.html) trait, as
 implemented by [BoxAllocator](struct.BoxAllocator.html), to allocate
-[DocBuilder](struct.DocBuilder.html) instances.  See
+[DocumentTree](struct.DocumentTree.html) instances.  See
 [examples/trees.rs](https://github.com/freebroccolo/pretty.rs/blob/master/examples/trees.rs#L39)
 for this approach.

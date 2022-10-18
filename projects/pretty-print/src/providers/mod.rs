@@ -176,11 +176,9 @@ impl<'a> PrettyProvider<'a> {
     /// Allocate a document concatenating the given documents.
     #[inline]
     pub fn concat<I>(&'a self, docs: I) -> DocumentTree
-        where
-            I: IntoIterator,
-            I::Item: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec>,
     {
-        self.arena.concat(docs)
+        todo!()
+        // self.arena.concat(docs)
     }
     /// Allocate a document that intersperses the given separator `S` between the given documents
     /// `[A, B, C, ..., Z]`, yielding `[A, S, B, S, C, S, ..., S, Z]`.
@@ -193,9 +191,8 @@ impl<'a> PrettyProvider<'a> {
     pub fn intersperse<T, S>(&'a self, terms: &[T], joint: S) -> DocumentTree
         where
             T: PrettyPrint,
-            S: Pretty<'a, Arena<'a, ColorSpec>, ColorSpec> + Clone,
     {
-        self.arena.intersperse(terms.iter().map(|x| x.build(self)), joint)
+        todo!()
     }
     /// Allocate a document that intersperses the given separator `S` between the given documents
     /// `[A, B, C, ..., Z]`, yielding `[A, S, B, S, C, S, ..., S, Z]`.
@@ -209,6 +206,6 @@ impl<'a> PrettyProvider<'a> {
         where
             T: PrettyPrint,
     {
-        self.arena.intersperse(terms.iter().map(|x| x.build(self)), self.arena.text(joint))
+        todo!()
     }
 }

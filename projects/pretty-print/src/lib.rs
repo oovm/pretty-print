@@ -198,7 +198,7 @@ impl DocumentTree
     fn flat_alt<D>(self, doc: D) -> Self
     {
         todo!()
-        // DocBuilder(T::ALLOCATOR, self.into())
+        // DocumentTree(T::ALLOCATOR, self.into())
         //     .flat_alt(doc)
         //     .into_plain_doc()
     }
@@ -373,8 +373,8 @@ impl DocumentTree
             self
         } else {
             let grapheme_len = s.graphemes(true).count();
-            let DocBuilder(allocator, _) = self;
-            DocBuilder(
+            let DocumentTree(allocator, _) = self;
+            DocumentTree(
                 allocator,
                 DocumentTree::RenderLen(grapheme_len, self.into_doc()).into(),
             )
@@ -383,23 +383,18 @@ impl DocumentTree
 
     /// Append the given document after this document.
     #[inline]
-    pub fn append<E>(self, that: E) -> Self
+    pub fn append<E>(self, follow: E) -> Self
         where
-            E: Pretty,
+            E: Into<DocumentTree>
     {
-        let DocBuilder(allocator, _) = self;
-        let that = that.pretty(allocator);
-        match (&*self, &*that) {
-            (DocumentTree::Nil, _) => that,
+        let rhs = follow.into();
+        match (&*self, &*rhs) {
+            (DocumentTree::Nil, _) => rhs,
             (_, DocumentTree::Nil) => self,
-            _ => DocBuilder(
-                allocator,
-                DocumentTree::Append(
-                    allocator.alloc_cow(self.into()),
-                    allocator.alloc_cow(that.into()),
-                )
-                    .into(),
-            ),
+            _ => Self::Append {
+                base: Rc::new(self),
+                rest: Rc::new(rhs),
+            },
         }
     }
 
@@ -430,11 +425,11 @@ impl DocumentTree
     #[inline]
     pub fn flat_alt<E>(self, that: E) -> Self
         where
-            E: Pretty
+            E: Into<DocumentTree>
     {
-        let DocBuilder(allocator, this) = self;
+        let DocumentTree(allocator, this) = self;
         let that = that.pretty(allocator);
-        DocBuilder(
+        DocumentTree(
             allocator,
             DocumentTree::FlatAlt(allocator.alloc_cow(this), allocator.alloc_cow(that.into())).into(),
         )
@@ -447,7 +442,7 @@ impl DocumentTree
     /// horizontally and combined into a one single line, or they are each layed out on their own
     /// line.
     #[inline]
-    pub fn group(self) -> DocBuilder<'a, D, A> {
+    pub fn group(self) -> Self {
         match *self.1 {
             DocumentTree::Group(_)
             | DocumentTree::Text(_)
@@ -455,46 +450,46 @@ impl DocumentTree
             // | Doc::SmallText(_)
             | DocumentTree::Nil => self,
             _ => {
-                let DocBuilder(allocator, this) = self;
-                DocBuilder(allocator, DocumentTree::Group(allocator.alloc_cow(this)).into())
+                let DocumentTree(allocator, this) = self;
+                DocumentTree(allocator, DocumentTree::Group(allocator.alloc_cow(this)).into())
             }
         }
     }
 
     /// Increase the indentation level of this document.
     #[inline]
-    pub fn nest(self, offset: isize) -> DocBuilder<'a, D, A> {
+    pub fn nest(self, offset: isize) -> Self {
         if let DocumentTree::Nil = &*self.1 {
             return self;
         }
         if offset == 0 {
             return self;
         }
-        let DocBuilder(allocator, this) = self;
-        DocBuilder(
+        let DocumentTree(allocator, this) = self;
+        DocumentTree(
             allocator,
             DocumentTree::Nest(offset, allocator.alloc_cow(this)).into(),
         )
     }
 
     #[inline]
-    pub fn annotate(self, ann: A) -> DocBuilder<'a, D, A> {
-        let DocBuilder(allocator, this) = self;
-        DocBuilder(
+    pub fn annotate(self, ann: ColorSpec) -> Self {
+        let DocumentTree(allocator, this) = self;
+        DocumentTree(
             allocator,
             DocumentTree::Annotated(ann, allocator.alloc_cow(this)).into(),
         )
     }
 
     #[inline]
-    pub fn union<E>(self, other: E) -> DocBuilder<'a, D, A>
+    pub fn union<E>(self, other: E) -> Self
         where
-            E: Into<BuildDoc<'a, D::Doc, A>>,
+            E: Into<DocumentTree>
     {
-        let DocBuilder(allocator, this) = self;
+        let DocumentTree(allocator, this) = self;
         let other = other.into();
         let doc = DocumentTree::Union(allocator.alloc_cow(this), allocator.alloc_cow(other));
-        DocBuilder(allocator, doc.into())
+        DocumentTree(allocator, doc.into())
     }
 
     /// Lays out `self` so with the nesting level set to the current column
@@ -517,9 +512,8 @@ impl DocumentTree
     /// assert_eq!(doc.1.pretty(80).to_string(), "lorem ipsum\n      dolor\nnext");
     /// ```
     #[inline]
-    pub fn align(self) -> DocBuilder<'a, D, A>
-        where
-            DocBuilder<'a, D, A>: Clone,
+    pub fn align(self) -> Self
+
     {
         let allocator = self.0;
         allocator.column(move |col| {
@@ -547,9 +541,8 @@ impl DocumentTree
     /// );
     /// ```
     #[inline]
-    pub fn hang(self, adjust: isize) -> DocBuilder<'a, D, A>
-        where
-            DocBuilder<'a, D, A>: Clone,
+    pub fn hang(self, adjust: isize) -> Self
+
     {
         self.nest(adjust).align()
     }
@@ -575,13 +568,12 @@ impl DocumentTree
     /// );
     /// ```
     #[inline]
-    pub fn indent(self, adjust: usize) -> DocBuilder<'a, D, A>
-        where
-            DocBuilder<'a, D, A>: Clone,
+    pub fn indent(self, adjust: usize) -> Self
+
     {
         let spaces = {
             use crate::render::SPACES;
-            let DocBuilder(allocator, _) = self;
+            let DocumentTree(allocator, _) = self;
             let mut doc = allocator.nil();
             let mut remaining = adjust;
             while remaining != 0 {
@@ -610,16 +602,15 @@ impl DocumentTree
     /// assert_eq!(doc.1.pretty(80).to_string(), "prefix | <- column 7");
     /// ```
     #[inline]
-    pub fn width(self, f: impl Fn(isize) -> D::Doc + 'a) -> DocBuilder<'a, D, A>
-        where
-            BuildDoc<'a, D::Doc, A>: Clone,
+    pub fn width(self, f: impl Fn(isize) -> Self) -> Self
+
     {
-        let DocBuilder(allocator, this) = self;
+        let DocumentTree(allocator, this) = self;
         let f = allocator.alloc_width_fn(f);
         allocator.column(move |start| {
             let f = f.clone();
 
-            DocBuilder(allocator, this.clone())
+            DocumentTree(allocator, this.clone())
                 .append(allocator.column(move |end| f(end as isize - start as isize)))
                 .into_doc()
         })
@@ -627,36 +618,36 @@ impl DocumentTree
 
     /// Puts `self` between `before` and `after`
     #[inline]
-    pub fn enclose<E, F>(self, before: E, after: F) -> DocBuilder<'a, D, A>
+    pub fn enclose<E, F>(self, before: E, after: F) -> Self
         where
-            E: Pretty<'a, D, A>,
-            F: Pretty<'a, D, A>,
+            E: Into<DocumentTree>,
+            F: Into<DocumentTree>,
     {
-        let DocBuilder(allocator, _) = self;
-        DocBuilder(allocator, before.pretty(allocator).1)
+        let DocumentTree(allocator, _) = self;
+        DocumentTree(allocator, before.pretty(allocator).1)
             .append(self)
             .append(after)
     }
 
-    pub fn single_quotes(self) -> DocBuilder<'a, D, A> {
+    pub fn single_quotes(self) -> Self {
         self.enclose("'", "'")
     }
 
-    pub fn double_quotes(self) -> DocBuilder<'a, D, A> {
+    pub fn double_quotes(self) -> Self {
         self.enclose("\"", "\"")
     }
-    pub fn parens(self) -> DocBuilder<'a, D, A> {
+    pub fn parens(self) -> Self {
         self.enclose("(", ")")
     }
 
-    pub fn angles(self) -> DocBuilder<'a, D, A> {
+    pub fn angles(self) -> Self {
         self.enclose("<", ">")
     }
-    pub fn braces(self) -> DocBuilder<'a, D, A> {
+    pub fn braces(self) -> Self {
         self.enclose("{", "}")
     }
 
-    pub fn brackets(self) -> DocBuilder<'a, D, A> {
+    pub fn brackets(self) -> Self {
         self.enclose("[", "]")
     }
 
@@ -664,13 +655,6 @@ impl DocumentTree
         match self.1 {
             BuildDoc::DocPtr(d) => d,
             BuildDoc::Doc(d) => self.0.alloc(d),
-        }
-    }
-
-    fn into_plain_doc(self) -> DocumentTree<'a, D::Doc> {
-        match self.1 {
-            BuildDoc::DocPtr(_) => unreachable!(),
-            BuildDoc::Doc(d) => d,
         }
     }
 }
@@ -683,7 +667,7 @@ mod tests {
     macro_rules! chain {
         ($first: expr $(, $rest: expr)* $(,)?) => {{
             #[allow(unused_mut)]
-            let mut doc = DocBuilder(&BoxAllocator, $first.into());
+            let mut doc = DocumentTree(&BoxAllocator, $first.into());
             $(
                 doc = doc.append($rest);
             )*

@@ -2,12 +2,12 @@
 //! ideally be layed out onto a single line instead of breaking them up into multiple lines. See
 //! `BlockDoc` for an example
 
-use crate::{docs, DocumentTree,  DocBuilder};
+use crate::{docs, DocumentTree,  DocumentTree};
 
 pub struct Affixes<'doc, D, A>
 {
-    prefix: DocBuilder<'doc, D, A>,
-    suffix: DocBuilder<'doc, D, A>,
+    prefix: DocumentTree<'doc, D, A>,
+    suffix: DocumentTree<'doc, D, A>,
     nest: bool,
 }
 
@@ -24,7 +24,7 @@ impl<'a, D> Clone for Affixes<'a, D>
 
 impl<'doc, D, A> Affixes<'doc, D, A>
 {
-    pub fn new(prefix: DocBuilder<'doc, D, A>, suffix: DocBuilder<'doc, D, A>) -> Self {
+    pub fn new(prefix: DocumentTree<'doc, D, A>, suffix: DocumentTree<'doc, D, A>) -> Self {
         Affixes {
             prefix,
             suffix,
@@ -72,7 +72,7 @@ pub struct BlockDoc<'doc, D, A>
         D: DocAllocator<'doc, A>,
 {
     pub affixes: Vec<Affixes<'doc, D, A>>,
-    pub body: DocBuilder<'doc, D, A>,
+    pub body: DocumentTree<'doc, D, A>,
 }
 
 impl<'doc, D, A> BlockDoc<'doc, D, A>
@@ -81,7 +81,7 @@ impl<'doc, D, A> BlockDoc<'doc, D, A>
         D::Doc: Clone,
         A: Clone,
 {
-    pub fn format(self, nest: isize) -> DocBuilder<'doc, D, A> {
+    pub fn format(self, nest: isize) -> DocumentTree<'doc, D, A> {
         let arena = self.body.0;
 
         let fail_on_multi_line = arena.fail().flat_alt(arena.nil());
@@ -138,7 +138,7 @@ impl<'doc, D, A> BlockDoc<'doc, D, A>
                     .group(),
                 ]
             })
-            .fold(None::<DocBuilder<_, _>>, |acc, doc| {
+            .fold(None::<DocumentTree<_, _>>, |acc, doc| {
                 Some(match acc {
                     None => doc,
                     Some(acc) => acc.union(doc),
