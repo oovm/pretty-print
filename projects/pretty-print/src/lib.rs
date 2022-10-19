@@ -237,7 +237,7 @@ impl DocumentTree
                 for<'b> W: RenderAnnotated,
                 W: ?Sized,
     {
-        render::best(Rc::new(self.clone()), width, out)
+        render::best(self, width, out)
     }
 
     /// Returns a value which implements `std::fmt::Display`
@@ -263,7 +263,7 @@ impl DocumentTree
         where
             W: WriteColor,
     {
-        render::best(Rc::new(self.clone()), width, &mut TermColored::new(out))
+        render::best(self, width, &mut TermColored::new(out))
     }
 }
 

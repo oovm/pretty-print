@@ -491,8 +491,8 @@ impl<'a> Best<'a>
                         // we can
                         match self.back_cmds.pop() {
                             Some(next) => {
-                                write_newline(next.0, out)?;
-                                self.pos = next.0;
+                                write_newline(next.indent, out)?;
+                                self.pos = next.indent;
                                 cmd = next;
                                 continue;
                             }
@@ -538,7 +538,7 @@ impl<'a> Best<'a>
                     DocumentTree::Annotated { color, doc } => {
                         out.push_annotation(&color)?;
                         self.annotation_levels.push(self.back_cmds.len());
-                        cmd.2 = doc.clone();
+                        cmd.node = doc;
                         continue;
                     }
                     DocumentTree::Union { left, right } => {
@@ -546,7 +546,11 @@ impl<'a> Best<'a>
                         let annotation_levels = self.annotation_levels.len();
                         let bcmds = self.back_cmds.len();
 
-                        self.back_cmds.push((ind, mode, left.clone()));
+                        self.back_cmds.push(RenderCommand{
+                            indent: ind,
+                            mode,
+                            node:left,
+                        });
 
                         let mut buffer = BufferWrite::new();
 
@@ -556,17 +560,17 @@ impl<'a> Best<'a>
                                 self.pos = pos;
                                 self.back_cmds.truncate(bcmds);
                                 self.annotation_levels.truncate(annotation_levels);
-                                cmd.2 = right.clone();
+                                cmd.node = right;
                                 continue;
                             }
                         }
                     }
                     DocumentTree::Column { column } => {
-                        cmd.2 = Rc::new(column(self.pos));
+                        cmd.node = &column(self.pos);
                         continue;
                     }
                     DocumentTree::Nesting { nesting } => {
-                        cmd.2 = Rc::new(nesting(self.pos));
+                        cmd.node = &nesting(self.pos);
                         continue;
                     }
                     DocumentTree::Fail => return Err(out.fail_doc()),
