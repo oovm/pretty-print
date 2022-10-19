@@ -1,8 +1,6 @@
-use crate::providers::{PrettyProvider};
+use crate::{providers::PrettyProvider, DocumentTree};
 use alloc::string::String;
 use termcolor::Buffer;
-use crate::DocumentTree;
-
 
 /// Marker trait for types that can be pretty printed.
 pub trait PrettyPrint {

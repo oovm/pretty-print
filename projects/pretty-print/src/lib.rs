@@ -12,21 +12,10 @@ mod blocks;
 mod providers;
 mod traits;
 
+pub use crate::{blocks::k_and_r_bracket::KAndRBracket, providers::PrettyProvider, traits::PrettyPrint};
 use core::fmt::{Debug, Formatter};
-pub use crate::{
-    providers::{PrettyProvider},
-    traits::PrettyPrint,
-    blocks::k_and_r_bracket::KAndRBracket,
-};
 
-use std::{
-    borrow::Cow,
-    convert::TryInto,
-    ops::{Add},
-    rc::Rc,
-};
-use std::fmt::Display;
-
+use std::{borrow::Cow, convert::TryInto, fmt::Display, ops::Add, rc::Rc};
 
 use termcolor::{ColorSpec, WriteColor};
 
@@ -35,8 +24,7 @@ mod render;
 
 // pub use self::block::{Affixes, BlockDoc};
 
-pub use self::render::TermColored;
-pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated};
+pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated, TermColored};
 
 /// The concrete document type. This type is not meant to be used directly. Instead use the static
 /// functions on `Doc` or the methods on an `DocAllocator`.
@@ -44,64 +32,34 @@ pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated};
 /// The `T` parameter is used to abstract over pointers to `Doc`. See `RefDoc` and `BoxDoc` for how
 /// it is used
 #[derive(Clone)]
-pub enum DocumentTree
-{
+pub enum DocumentTree {
     Nil,
-    Append {
-        lhs: Rc<Self>,
-        rhs: Rc<Self>,
-    },
+    Append { lhs: Rc<Self>, rhs: Rc<Self> },
     // Sequence {
     //     items: Vec<Self>,
     // },
-    Group {
-        items: Rc<Self>,
-    },
-    FlatAlt {
-        block: Rc<Self>,
-        inline: Rc<Self>,
-    },
-    Nest {
-        space: isize,
-        doc: Rc<Self>,
-    },
+    Group { items: Rc<Self> },
+    FlatAlt { block: Rc<Self>, inline: Rc<Self> },
+    Nest { space: isize, doc: Rc<Self> },
     Hardline,
     // Stores the length of a string document that is not just ascii
-    RenderLen {
-        len: usize,
-        doc: Rc<Self>,
-    },
+    RenderLen { len: usize, doc: Rc<Self> },
     Text(Rc<str>),
     StaticText(&'static str),
-    Annotated {
-        color: ColorSpec,
-        doc: Rc<Self>,
-    },
-    Union {
-        left: Rc<Self>,
-        right: Rc<Self>,
-    },
-    Column {
-        column: fn(usize) -> Self,
-    },
-    Nesting {
-        nesting: fn(usize) -> Self,
-    },
+    Annotated { color: ColorSpec, doc: Rc<Self> },
+    Union { left: Rc<Self>, right: Rc<Self> },
+    Column { column: fn(usize) -> Self },
+    Nesting { nesting: fn(usize) -> Self },
     Fail,
 }
 
-impl Default for DocumentTree
-{
+impl Default for DocumentTree {
     fn default() -> Self {
         Self::Nil
     }
 }
 
-fn append_docs(
-    mut doc: &DocumentTree,
-    consumer: &mut impl FnMut(&DocumentTree),
-)
-{
+fn append_docs(mut doc: &DocumentTree, consumer: &mut impl FnMut(&DocumentTree)) {
     loop {
         match doc {
             DocumentTree::Append { lhs: base, rhs: rest } => {
@@ -113,8 +71,7 @@ fn append_docs(
     }
 }
 
-impl Debug for DocumentTree
-{
+impl Debug for DocumentTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let is_line = |doc: &DocumentTree| match doc {
             DocumentTree::FlatAlt { block: flat, inline: alt } => {
@@ -154,9 +111,7 @@ impl Debug for DocumentTree
             DocumentTree::RenderLen { doc, .. } => doc.fmt(f),
             DocumentTree::Text(s) => Debug::fmt(s, f),
             DocumentTree::StaticText(s) => Debug::fmt(s, f),
-            DocumentTree::Annotated { color, doc } => {
-                f.debug_tuple("Annotated").field(color).field(doc).finish()
-            }
+            DocumentTree::Annotated { color, doc } => f.debug_tuple("Annotated").field(color).field(doc).finish(),
             DocumentTree::Union { left, right } => f.debug_tuple("Union").field(left).field(right).finish(),
             DocumentTree::Column { .. } => f.debug_tuple("Column(..)").finish(),
             DocumentTree::Nesting { .. } => f.debug_tuple("Nesting(..)").finish(),
@@ -165,8 +120,7 @@ impl Debug for DocumentTree
     }
 }
 
-impl DocumentTree
-{
+impl DocumentTree {
     #[inline]
     pub fn space() -> Self {
         DocumentTree::StaticText(" ").into()
@@ -184,8 +138,7 @@ impl DocumentTree
     }
 }
 
-impl DocumentTree
-{
+impl DocumentTree {
     /// The given text, which must not contain line breaks.
     #[inline]
     pub fn text<U: Into<Cow<'static, str>>>(data: U) -> Self {
@@ -197,26 +150,23 @@ impl DocumentTree
 }
 
 /// The given text, which must not contain line breaks.
-pub struct PrettyFormatter<'a>
-{
+pub struct PrettyFormatter<'a> {
     tree: &'a DocumentTree,
     width: usize,
 }
 
-impl<'a> Display for PrettyFormatter<'a>
-{
+impl<'a> Display for PrettyFormatter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         self.tree.render_fmt(self.width, f)
     }
 }
 
-impl DocumentTree
-{
+impl DocumentTree {
     /// Writes a rendered document to a `std::io::Write` object.
     #[inline]
     pub fn render<W>(&self, width: usize, out: &mut W) -> std::io::Result<()>
-        where
-            W: ?Sized + std::io::Write,
+    where
+        W: ?Sized + std::io::Write,
     {
         self.render_raw(width, &mut IoWrite::new(out))
     }
@@ -224,8 +174,8 @@ impl DocumentTree
     /// Writes a rendered document to a `std::fmt::Write` object.
     #[inline]
     pub fn render_fmt<W>(&self, width: usize, out: &mut W) -> core::fmt::Result
-        where
-            W: ?Sized + core::fmt::Write,
+    where
+        W: ?Sized + core::fmt::Write,
     {
         self.render_raw(width, &mut FmtWrite::new(out))
     }
@@ -233,9 +183,9 @@ impl DocumentTree
     /// Writes a rendered document to a `RenderAnnotated<A>` object.
     #[inline]
     pub fn render_raw<W>(&self, width: usize, out: &mut W) -> Result<(), W::Error>
-        where
-                for<'b> W: RenderAnnotated,
-                W: ?Sized,
+    where
+        for<'b> W: RenderAnnotated,
+        W: ?Sized,
     {
         render::best(self, width, out)
     }
@@ -243,10 +193,9 @@ impl DocumentTree
     /// Returns a value which implements `std::fmt::Display`
     ///
     /// ```
-    /// use pretty::{Doc, BoxDoc};
-    /// let doc = BoxDoc::<()>::group(
-    ///     BoxDoc::text("hello").append(Doc::line()).append(Doc::text("world"))
-    /// );
+    /// use pretty::{BoxDoc, Doc};
+    /// let doc =
+    ///     BoxDoc::<()>::group(BoxDoc::text("hello").append(Doc::line()).append(Doc::text("world")));
     /// assert_eq!(format!("{}", doc.pretty(80)), "hello world");
     /// ```
     #[inline]
@@ -255,30 +204,29 @@ impl DocumentTree
     }
 }
 
-impl DocumentTree
-
-{
+impl DocumentTree {
     #[inline]
     pub fn render_colored<W>(&self, width: usize, out: W) -> std::io::Result<()>
-        where
-            W: WriteColor,
+    where
+        W: WriteColor,
     {
         render::best(self, width, &mut TermColored::new(out))
     }
 }
 
-impl<T> Add<T> for DocumentTree where T: Into<DocumentTree> {
+impl<T> Add<T> for DocumentTree
+where
+    T: Into<DocumentTree>,
+{
     type Output = Self;
     fn add(self, rhs: T) -> Self::Output {
         self.append(rhs.into())
     }
 }
 
-
 impl<T> From<Option<T>> for DocumentTree
-    where
-        DocumentTree: From<T>,
-
+where
+    DocumentTree: From<T>,
 {
     fn from(x: Option<T>) -> Self {
         match x {
@@ -340,8 +288,7 @@ macro_rules! docs {
 
 use unicode_segmentation::UnicodeSegmentation;
 
-impl DocumentTree
-{
+impl DocumentTree {
     fn with_utf8_len(self) -> Self {
         let s = match &self {
             Self::Text(s) => s.as_ref(),
@@ -351,36 +298,31 @@ impl DocumentTree
         };
         if s.is_ascii() {
             self
-        } else {
+        }
+        else {
             let grapheme_len = s.graphemes(true).count();
-            Self::RenderLen {
-                len: grapheme_len,
-                doc: Rc::new(self),
-            }
+            Self::RenderLen { len: grapheme_len, doc: Rc::new(self) }
         }
     }
 
     /// Append the given document after this document.
     #[inline]
     pub fn append<E>(self, follow: E) -> Self
-        where
-            E: Into<DocumentTree>
+    where
+        E: Into<DocumentTree>,
     {
         let rhs = follow.into();
         match (&self, &rhs) {
             (Self::Nil, _) => rhs,
             (_, Self::Nil) => self,
-            _ => Self::Append {
-                lhs: Rc::new(self),
-                rhs: Rc::new(rhs),
-            },
+            _ => Self::Append { lhs: Rc::new(self), rhs: Rc::new(rhs) },
         }
     }
 
     pub fn concat<I>(docs: I) -> Self
-        where
-            I: IntoIterator,
-            I::Item: Into<DocumentTree>,
+    where
+        I: IntoIterator,
+        I::Item: Into<DocumentTree>,
     {
         let mut iter = docs.into_iter();
         match iter.next() {
@@ -402,18 +344,12 @@ impl DocumentTree
     ///
     /// let arena = Arena::<()>::new();
     /// let body = arena.line().append("x");
-    /// let doc = arena.text("let")
+    /// let doc = arena
+    ///     .text("let")
     ///     .append(arena.line())
     ///     .append("x")
     ///     .group()
-    ///     .append(
-    ///         body.clone()
-    ///             .flat_alt(
-    ///                 arena.line()
-    ///                     .append("in")
-    ///                     .append(body)
-    ///             )
-    ///     )
+    ///     .append(body.clone().flat_alt(arena.line().append("in").append(body)))
     ///     .group();
     ///
     /// assert_eq!(doc.1.pretty(100).to_string(), "let x in x");
@@ -421,15 +357,12 @@ impl DocumentTree
     /// ```
     #[inline]
     pub fn flat_alt<E>(self, flat: E) -> Self
-        where
-            E: Into<DocumentTree>
+    where
+        E: Into<DocumentTree>,
     {
         let rhs = flat.into();
 
-        Self::FlatAlt {
-            block: Rc::new(self),
-            inline: Rc::new(rhs),
-        }
+        Self::FlatAlt { block: Rc::new(self), inline: Rc::new(rhs) }
     }
 
     /// Mark this document as a group.
@@ -441,15 +374,8 @@ impl DocumentTree
     #[inline]
     pub fn group(self) -> Self {
         match self {
-            Self::Group { .. }
-            | Self::Text(_)
-            | Self::StaticText(_)
-            | Self::Nil => self,
-            _ => {
-                Self::Group {
-                    items: Rc::new(self),
-                }
-            }
+            Self::Group { .. } | Self::Text(_) | Self::StaticText(_) | Self::Nil => self,
+            _ => Self::Group { items: Rc::new(self) },
         }
     }
 
@@ -465,29 +391,20 @@ impl DocumentTree
         if offset == 0 {
             return self;
         }
-        Self::Nest {
-            space: offset,
-            doc: Rc::new(self),
-        }
+        Self::Nest { space: offset, doc: Rc::new(self) }
     }
 
     #[inline]
     pub fn annotate(self, ann: ColorSpec) -> Self {
-        Self::Annotated {
-            color: ann,
-            doc: Rc::new(self),
-        }
+        Self::Annotated { color: ann, doc: Rc::new(self) }
     }
 
     #[inline]
     pub fn union<E>(self, other: E) -> Self
-        where
-            E: Into<DocumentTree>
+    where
+        E: Into<DocumentTree>,
     {
-        Self::Union {
-            left: Rc::new(self),
-            right: Rc::new(other.into()),
-        }
+        Self::Union { left: Rc::new(self), right: Rc::new(other.into()) }
     }
 
     /// Lays out `self` so with the nesting level set to the current column
@@ -510,8 +427,7 @@ impl DocumentTree
     /// assert_eq!(doc.1.pretty(80).to_string(), "lorem ipsum\n      dolor\nnext");
     /// ```
     #[inline]
-    pub fn align(self) -> Self
-    {
+    pub fn align(self) -> Self {
         todo!()
         // Self::Column {
         //     column: move |col| {
@@ -532,7 +448,9 @@ impl DocumentTree
     /// use pretty::DocAllocator;
     ///
     /// let arena = pretty::Arena::<()>::new();
-    /// let doc = arena.text("prefix").append(arena.text(" "))
+    /// let doc = arena
+    ///     .text("prefix")
+    ///     .append(arena.text(" "))
     ///     .append(arena.reflow("Indenting these words with nest").hang(4));
     /// assert_eq!(
     ///     doc.1.pretty(24).to_string(),
@@ -540,9 +458,7 @@ impl DocumentTree
     /// );
     /// ```
     #[inline]
-    pub fn hang(self, adjust: isize) -> Self
-
-    {
+    pub fn hang(self, adjust: isize) -> Self {
         self.nest(adjust).align()
     }
 
@@ -555,20 +471,22 @@ impl DocumentTree
     /// use pretty::DocAllocator;
     ///
     /// let arena = pretty::Arena::<()>::new();
-    /// let doc = arena.text("prefix").append(arena.text(" "))
+    /// let doc = arena
+    ///     .text("prefix")
+    ///     .append(arena.text(" "))
     ///     .append(arena.reflow("The indent function indents these words!").indent(4));
     /// assert_eq!(
     ///     doc.1.pretty(24).to_string(),
-    /// "
+    ///     "
     /// prefix     The indent
     ///            function
     ///            indents these
-    ///            words!".trim_start(),
+    ///            words!"
+    ///         .trim_start(),
     /// );
     /// ```
     #[inline]
-    pub fn indent(self, adjust: usize) -> Self
-    {
+    pub fn indent(self, adjust: usize) -> Self {
         let spaces = {
             use crate::render::SPACES;
             let mut doc = DocumentTree::Nil;
@@ -592,16 +510,13 @@ impl DocumentTree
     /// use pretty::DocAllocator;
     ///
     /// let arena = pretty::Arena::<()>::new();
-    /// let doc = arena.text("prefix ")
-    ///     .append(arena.column(|l| {
-    ///         arena.text("| <- column ").append(arena.as_string(l)).into_doc()
-    ///     }));
+    /// let doc = arena
+    ///     .text("prefix ")
+    ///     .append(arena.column(|l| arena.text("| <- column ").append(arena.as_string(l)).into_doc()));
     /// assert_eq!(doc.1.pretty(80).to_string(), "prefix | <- column 7");
     /// ```
     #[inline]
-    pub fn width(self, f: impl Fn(isize) -> Self) -> Self
-
-    {
+    pub fn width(self, f: impl Fn(isize) -> Self) -> Self {
         todo!()
         // let f = allocator.alloc_width_fn(f);
         // allocator.column(move |start| {
@@ -616,9 +531,9 @@ impl DocumentTree
     /// Puts `self` between `before` and `after`
     #[inline]
     pub fn enclose<E, F>(self, before: E, after: F) -> Self
-        where
-            E: Into<Self>,
-            F: Into<Self>,
+    where
+        E: Into<Self>,
+        F: Into<Self>,
     {
         before.into().append(self).append(after.into())
     }

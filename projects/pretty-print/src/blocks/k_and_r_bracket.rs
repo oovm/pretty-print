@@ -34,8 +34,8 @@ impl KAndRBracket {
         inline_join: DocumentTree,
         block_join: DocumentTree,
     ) -> DocumentTree
-        where
-            I: PrettyPrint,
+    where
+        I: PrettyPrint,
     {
         let mut output = Vec::with_capacity(5);
         if self.head_space {
