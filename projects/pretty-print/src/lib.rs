@@ -22,10 +22,11 @@ pub use crate::{
 use std::{
     borrow::Cow,
     convert::TryInto,
-    ops::{Add, AddAssign, Deref},
+    ops::{Add},
     rc::Rc,
 };
 use std::fmt::Display;
+
 
 use termcolor::{ColorSpec, WriteColor};
 
@@ -47,8 +48,8 @@ pub enum DocumentTree
 {
     Nil,
     Append {
-        base: Rc<Self>,
-        rest: Rc<Self>,
+        lhs: Rc<Self>,
+        rhs: Rc<Self>,
     },
     // Sequence {
     //     items: Vec<Self>,
@@ -103,7 +104,7 @@ fn append_docs(
 {
     loop {
         match doc {
-            DocumentTree::Append { base, rest } => {
+            DocumentTree::Append { lhs: base, rhs: rest } => {
                 append_docs(base, consumer);
                 doc = rest;
             }
@@ -129,7 +130,7 @@ impl Debug for DocumentTree
         };
         match self {
             DocumentTree::Nil => f.debug_tuple("Nil").finish(),
-            DocumentTree::Append { base, rest } => {
+            DocumentTree::Append { lhs: base, rhs: rest } => {
                 let mut f = f.debug_list();
                 append_docs(self, &mut |doc| {
                     f.entry(doc);
@@ -150,7 +151,7 @@ impl Debug for DocumentTree
             }
             DocumentTree::Nest { space, doc } => f.debug_tuple("Nest").field(&space).field(doc).finish(),
             DocumentTree::Hardline => f.debug_tuple("Hardline").finish(),
-            DocumentTree::RenderLen {  doc,.. } => doc.fmt(f),
+            DocumentTree::RenderLen { doc, .. } => doc.fmt(f),
             DocumentTree::Text(s) => Debug::fmt(s, f),
             DocumentTree::StaticText(s) => Debug::fmt(s, f),
             DocumentTree::Annotated { color, doc } => {
@@ -195,16 +196,17 @@ impl DocumentTree
     }
 }
 
-pub struct PrettyFmt<'a>
+/// The given text, which must not contain line breaks.
+pub struct PrettyFormatter<'a>
 {
-    doc: &'a DocumentTree,
+    tree: &'a DocumentTree,
     width: usize,
 }
 
-impl<'a> Display for PrettyFmt<'a>
+impl<'a> Display for PrettyFormatter<'a>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        self.doc.render_fmt(self.width, f)
+        self.tree.render_fmt(self.width, f)
     }
 }
 
@@ -232,7 +234,7 @@ impl DocumentTree
     #[inline]
     pub fn render_raw<W>(&self, width: usize, out: &mut W) -> Result<(), W::Error>
         where
-                for<'b> W: render::RenderAnnotated,
+                for<'b> W: RenderAnnotated,
                 W: ?Sized,
     {
         render::best(Rc::new(self.clone()), width, out)
@@ -248,8 +250,8 @@ impl DocumentTree
     /// assert_eq!(format!("{}", doc.pretty(80)), "hello world");
     /// ```
     #[inline]
-    pub fn pretty<'d>(&'d self, width: usize) -> PrettyFmt<'d> {
-        PrettyFmt { doc: self, width }
+    pub fn pretty(&self, width: usize) -> PrettyFormatter {
+        PrettyFormatter { tree: self, width }
     }
 }
 
@@ -265,14 +267,10 @@ impl DocumentTree
     }
 }
 
-impl Add<Self> for DocumentTree {
+impl<T> Add<T> for DocumentTree where T: Into<DocumentTree> {
     type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::Append {
-            base: Rc::new(self),
-            rest: Rc::new(rhs),
-        }
+    fn add(self, rhs: T) -> Self::Output {
+        self.append(rhs.into())
     }
 }
 
@@ -340,6 +338,8 @@ macro_rules! docs {
     }}
 }
 
+use unicode_segmentation::UnicodeSegmentation;
+
 impl DocumentTree
 {
     fn with_utf8_len(self) -> Self {
@@ -349,8 +349,6 @@ impl DocumentTree
             // Doc::SmallText(s) => s,
             _ => return self,
         };
-        use unicode_segmentation::UnicodeSegmentation;
-
         if s.is_ascii() {
             self
         } else {
@@ -370,12 +368,30 @@ impl DocumentTree
     {
         let rhs = follow.into();
         match (&self, &rhs) {
-            (DocumentTree::Nil, _) => rhs,
-            (_, DocumentTree::Nil) => self,
+            (Self::Nil, _) => rhs,
+            (_, Self::Nil) => self,
             _ => Self::Append {
-                base: Rc::new(self),
-                rest: Rc::new(rhs),
+                lhs: Rc::new(self),
+                rhs: Rc::new(rhs),
             },
+        }
+    }
+
+    pub fn concat<I>(docs: I) -> Self
+        where
+            I: IntoIterator,
+            I::Item: Into<DocumentTree>,
+    {
+        let mut iter = docs.into_iter();
+        match iter.next() {
+            None => Self::Nil,
+            Some(doc) => {
+                let mut doc = doc.into();
+                for next in iter {
+                    doc = doc.append(next);
+                }
+                doc
+            }
         }
     }
 
@@ -495,15 +511,16 @@ impl DocumentTree
     /// ```
     #[inline]
     pub fn align(self) -> Self
-
     {
         todo!()
-        // allocator.column(move |col| {
-        //     let self_ = self.clone();
-        //     allocator
-        //         .nesting(move |nest| self_.clone().nest(col as isize - nest as isize).into_doc())
-        //         .into_doc()
-        // })
+        // Self::Column {
+        //     column: move |col| {
+        //         let self_ = self.clone();
+        //         Self::Nesting {
+        //             nesting: move |nest| self_.clone().nest(col as isize - nest as isize),
+        //         }
+        //     },
+        // }
     }
 
     /// Lays out `self` with a nesting level set to the current level plus `adjust`.
@@ -626,428 +643,5 @@ impl DocumentTree
 
     pub fn brackets(self) -> Self {
         self.enclose("[", "]")
-    }
-
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    macro_rules! chain {
-        ($first: expr $(, $rest: expr)* $(,)?) => {{
-            #[allow(unused_mut)]
-            let mut doc = DocumentTree(&BoxAllocator, $first.into());
-            $(
-                doc = doc.append($rest);
-            )*
-            doc.into_doc()
-        }}
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn doc_size() {
-        // Safeguard against accidentally growing Doc
-        assert_eq!(8 * 3, std::mem::size_of::<DocumentTree<RefDoc>>());
-    }
-
-    macro_rules! test {
-        ($size:expr, $actual:expr, $expected:expr) => {
-            let mut s = String::new();
-            $actual.render_fmt($size, &mut s).unwrap();
-            difference::assert_diff!(&s, $expected, "\n", 0);
-        };
-        ($actual:expr, $expected:expr) => {
-            test!(70, $actual, $expected)
-        };
-    }
-
-    #[test]
-    fn box_doc_inference() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("test")
-                .append(BoxDoc::line())
-                .append(BoxDoc::text("test")),
-        );
-
-        test!(doc, "test test");
-    }
-
-    #[test]
-    fn newline_in_text() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("test").append(
-                BoxDoc::line()
-                    .append(BoxDoc::text("\"test\n     test\""))
-                    .nest(4),
-            ),
-        );
-
-        test!(5, doc, "test\n    \"test\n     test\"");
-    }
-
-    #[test]
-    fn forced_newline() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("test")
-                .append(BoxDoc::hardline())
-                .append(BoxDoc::text("test")),
-        );
-
-        test!(doc, "test\ntest");
-    }
-
-    #[test]
-    fn space_do_not_reset_pos() {
-        let doc: BoxDoc<()> = BoxDoc::group(BoxDoc::text("test").append(BoxDoc::line()))
-            .append(BoxDoc::text("test"))
-            .append(BoxDoc::group(BoxDoc::line()).append(BoxDoc::text("test")));
-
-        test!(9, doc, "test test\ntest");
-    }
-
-    // Tests that the `BoxDoc::hardline()` does not cause the rest of document to think that it fits on
-    // a single line but instead breaks on the `BoxDoc::line()` to fit with 6 columns
-    #[test]
-    fn newline_does_not_cause_next_line_to_be_to_long() {
-        let doc: RcDoc<()> = RcDoc::group(
-            RcDoc::text("test").append(RcDoc::hardline()).append(
-                RcDoc::text("test")
-                    .append(RcDoc::line())
-                    .append(RcDoc::text("test")),
-            ),
-        );
-
-        test!(6, doc, "test\ntest\ntest");
-    }
-
-    #[test]
-    fn newline_after_group_does_not_affect_it() {
-        let arena = Arena::<()>::new();
-        let doc = arena.text("x").append(arena.line()).append("y").group();
-
-        test!(100, doc.append(arena.hardline()).1, "x y\n");
-    }
-
-    #[test]
-    fn block() {
-        let doc: RcDoc<()> = RcDoc::group(
-            RcDoc::text("{")
-                .append(
-                    RcDoc::line()
-                        .append(RcDoc::text("test"))
-                        .append(RcDoc::line())
-                        .append(RcDoc::text("test"))
-                        .nest(2),
-                )
-                .append(RcDoc::line())
-                .append(RcDoc::text("}")),
-        );
-
-        test!(5, doc, "{\n  test\n  test\n}");
-    }
-
-    #[test]
-    fn block_with_hardline() {
-        let doc: RcDoc<()> = RcDoc::group(
-            RcDoc::text("{")
-                .append(
-                    RcDoc::line()
-                        .append(RcDoc::text("test"))
-                        .append(RcDoc::hardline())
-                        .append(RcDoc::text("test"))
-                        .nest(2),
-                )
-                .append(RcDoc::line())
-                .append(RcDoc::text("}")),
-        );
-
-        test!(10, doc, "{\n  test\n  test\n}");
-    }
-
-    #[test]
-    fn block_with_hardline_negative_nest() {
-        let doc: RcDoc<()> = RcDoc::group(
-            RcDoc::text("{")
-                .append(
-                    RcDoc::line()
-                        .append(RcDoc::text("test"))
-                        .append(RcDoc::hardline())
-                        .append(RcDoc::text("test"))
-                        .nest(-2),
-                )
-                .append(RcDoc::line())
-                .append(RcDoc::text("}")),
-        );
-
-        test!(10, doc, "{\ntest\ntest\n}");
-    }
-
-    #[test]
-    fn line_comment() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("{")
-                .append(
-                    BoxDoc::line()
-                        .append(BoxDoc::text("test"))
-                        .append(BoxDoc::line())
-                        .append(BoxDoc::text("// a").append(BoxDoc::hardline()))
-                        .append(BoxDoc::text("test"))
-                        .nest(2),
-                )
-                .append(BoxDoc::line())
-                .append(BoxDoc::text("}")),
-        );
-
-        test!(14, doc, "{\n  test\n  // a\n  test\n}");
-    }
-
-    #[test]
-    fn annotation_no_panic() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("test")
-                .annotate(())
-                .append(BoxDoc::hardline())
-                .annotate(())
-                .append(BoxDoc::text("test")),
-        );
-
-        test!(doc, "test\ntest");
-    }
-
-    fn nest_on_line(doc: BoxDoc<'static, ()>) -> BoxDoc<'static, ()> {
-        BoxDoc::softline().append(BoxDoc::nesting(move |n| {
-            let doc = doc.clone();
-            BoxDoc::column(move |c| {
-                if n == c {
-                    BoxDoc::text("  ").append(doc.clone()).nest(2)
-                } else {
-                    doc.clone()
-                }
-            })
-        }))
-    }
-
-    #[test]
-    fn hang_lambda1() {
-        let doc = chain![
-            chain!["let", BoxDoc::line(), "x", BoxDoc::line(), "="].group(),
-            nest_on_line(chain![
-                "\\y ->",
-                chain![BoxDoc::line(), "y"].nest(2).group()
-            ]),
-        ]
-            .group();
-
-        test!(doc, "let x = \\y -> y");
-        test!(
-            8,
-            doc,
-            r"let x =
-  \y ->
-    y"
-        );
-        test!(
-            14,
-            doc,
-            r"let x = \y ->
-  y"
-        );
-    }
-
-    #[test]
-    fn hang_comment() {
-        let body = chain!["y"].nest(2).group();
-        let doc = chain![
-            chain!["let", BoxDoc::line(), "x", BoxDoc::line(), "="].group(),
-            nest_on_line(chain![
-                "\\y ->",
-                nest_on_line(chain!["// abc", BoxDoc::hardline(), body])
-            ]),
-        ]
-            .group();
-
-        test!(8, doc, "let x =\n  \\y ->\n    // abc\n    y");
-        test!(14, doc, "let x = \\y ->\n  // abc\n  y");
-    }
-
-    #[test]
-    fn union() {
-        let doc = chain![
-            chain!["let", BoxDoc::line(), "x", BoxDoc::line(), "="].group(),
-            nest_on_line(chain![
-                "(",
-                chain![
-                    BoxDoc::line_(),
-                    chain!["x", ","].group(),
-                    BoxDoc::line(),
-                    chain!["1234567890", ","].group()
-                ]
-                .nest(2)
-                .group(),
-                BoxDoc::line_().append(")"),
-            ])
-        ]
-            .group();
-
-        test!(doc, "let x = (x, 1234567890,)");
-        test!(8, doc, "let x =\n  (\n    x,\n    1234567890,\n  )");
-        test!(14, doc, "let x = (\n  x,\n  1234567890,\n)");
-    }
-
-    fn hang2(
-        from: BoxDoc<'static, ()>,
-        body_whitespace: BoxDoc<'static, ()>,
-        body: BoxDoc<'static, ()>,
-        trailer: BoxDoc<'static, ()>,
-    ) -> BoxDoc<'static, ()> {
-        let body1 = body_whitespace
-            .append(body.clone())
-            .nest(2)
-            .group()
-            .append(trailer.clone());
-        let body2 = BoxDoc::hardline()
-            .append(body.clone())
-            .nest(2)
-            .group()
-            .append(trailer.clone());
-
-        let single = from.clone().append(body1.clone()).group();
-
-        let hang = from.clone().append(body2).group();
-
-        let break_all = from.append(body1).group().nest(2);
-
-        BoxDoc::group(single.union(hang.union(break_all)))
-    }
-
-    #[test]
-    fn hang_lambda2() {
-        let from = chain![
-            chain!["let", BoxDoc::line(), "x", BoxDoc::line(), "="].group(),
-            BoxDoc::line(),
-            "\\y ->",
-        ]
-            .group();
-
-        let body = chain!["y"].group();
-
-        let trailer = BoxDoc::nil();
-
-        let doc = hang2(from, BoxDoc::line(), body, trailer);
-        eprintln!("{:#?}", doc);
-
-        test!(doc, "let x = \\y -> y");
-        test!(14, doc, "let x = \\y ->\n  y");
-    }
-
-    #[test]
-    fn union2() {
-        let from = chain![
-            chain!["let", BoxDoc::line(), "x", BoxDoc::line(), "="].group(),
-            BoxDoc::line(),
-            "(",
-        ]
-            .group();
-
-        let body = chain![
-            chain!["x", ","].group(),
-            BoxDoc::line(),
-            chain!["1234567890", ","].group()
-        ]
-            .group();
-
-        let trailer = BoxDoc::line_().append(")");
-
-        let doc = hang2(from, BoxDoc::line_(), body, trailer);
-
-        test!(doc, "let x = (x, 1234567890,)");
-        test!(14, doc, "let x = (\n  x,\n  1234567890,\n)");
-    }
-
-    #[test]
-    fn usize_max_value() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("test")
-                .append(BoxDoc::line())
-                .append(BoxDoc::text("test")),
-        );
-
-        test!(usize::max_value(), doc, "test test");
-    }
-
-    #[test]
-    fn fail() {
-        let fail_break: BoxDoc<()> = BoxDoc::fail().flat_alt(DocumentTree::nil());
-
-        let doc = fail_break.append(DocumentTree::text("12345")).group().union("abc");
-
-        test!(5, doc, "12345");
-        test!(4, doc, "abc");
-    }
-
-    pub struct TestWriter<W> {
-        upstream: W,
-    }
-
-    impl<W> TestWriter<W> {
-        pub fn new(upstream: W) -> Self {
-            Self { upstream }
-        }
-    }
-
-    impl<W> Render for TestWriter<W>
-        where
-            W: Render,
-    {
-        type Error = W::Error;
-
-        fn write_str(&mut self, s: &str) -> Result<usize, W::Error> {
-            self.upstream.write_str(s)
-        }
-
-        fn write_str_all(&mut self, s: &str) -> Result<(), W::Error> {
-            self.upstream.write_str_all(s)
-        }
-
-        fn fail_doc(&self) -> Self::Error {
-            self.upstream.fail_doc()
-        }
-    }
-
-    impl<W> RenderAnnotated<'_, ()> for TestWriter<W>
-        where
-            W: Render,
-    {
-        fn push_annotation(&mut self, _: &()) -> Result<(), Self::Error> {
-            self.upstream.write_str_all("[")
-        }
-
-        fn pop_annotation(&mut self) -> Result<(), Self::Error> {
-            self.upstream.write_str_all("]")
-        }
-    }
-
-    #[test]
-    fn annotations() {
-        let actual = BoxDoc::text("abc").annotate(()).annotate(());
-        let mut s = String::new();
-        actual
-            .render_raw(70, &mut TestWriter::new(FmtWrite::new(&mut s)))
-            .unwrap();
-        difference::assert_diff!(&s, "[[abc]]", "\n", 0);
-    }
-
-    #[test]
-    fn non_ascii_is_not_byte_length() {
-        let doc: BoxDoc<()> = BoxDoc::group(
-            BoxDoc::text("ÅÄÖ")
-                .append(BoxDoc::line())
-                .append(BoxDoc::text("test")),
-        );
-
-        test!(8, doc, "ÅÄÖ test");
     }
 }
