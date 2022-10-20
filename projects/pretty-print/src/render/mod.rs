@@ -206,10 +206,10 @@ fn append_docs<'a>(mut doc: &'a DocumentTree, consumer: &mut impl FnMut(&'a Docu
         // gain a slight performance increase by batching these pushes (avoiding
         // to push and directly pop `Append` documents)
         match doc {
-            DocumentTree::Append { lhs: base, rhs: rest } => {
-                let d = append_docs(base, consumer);
+            DocumentTree::Append { lhs, rhs } => {
+                let d = append_docs(rhs, consumer);
                 consumer(d);
-                doc = rest;
+                doc = lhs;
             }
             _ => return doc,
         }
@@ -376,9 +376,6 @@ impl<'a> Best<'a> {
                 match doc {
                     DocumentTree::Nil => {}
                     DocumentTree::Append { lhs, rhs } => {
-                        println!("lhs: {:?}", lhs);
-                        println!("rhs: {:?}", rhs);
-
                         cmd.node =
                             append_docs2(lhs, rhs, |doc| self.back_cmds.push(RenderCommand { indent: ind, mode, node: doc }));
                         continue;

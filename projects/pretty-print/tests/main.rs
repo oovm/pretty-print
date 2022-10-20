@@ -13,6 +13,7 @@ fn box1() {
     let doc = DocumentTree::text("hello")
         .annotate(ColorSpec::new().set_fg(Some(Color::Red)).clone())
         .append(DocumentTree::Hardline)
+        .append("a")
         .append(" ")
         .append("world");
     let mut buffer = Buffer::ansi();
@@ -23,8 +24,7 @@ fn box1() {
 
 #[test]
 fn box2() {
-    let doc = DocumentTree::concat(vec!["hello", " ", " ", "world"]);
-
+    let doc = DocumentTree::concat(vec!["hello", " ", " ", "world"]).group();
     println!("{}", doc.pretty(10));
 }
 

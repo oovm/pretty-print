@@ -121,15 +121,13 @@ impl Debug for DocumentTree {
     }
 }
 
+#[allow(non_upper_case_globals)]
 impl DocumentTree {
-    #[inline]
-    pub fn space() -> Self {
-        DocumentTree::StaticText(" ").into()
-    }
+    pub const Space: Self = DocumentTree::StaticText(" ");
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
     #[inline]
     pub fn line() -> Self {
-        Self::Hardline.flat_alt(Self::space()).into()
+        Self::Hardline.flat_alt(Self::Space).into()
     }
 
     ///   Acts like  `line`  but behaves like  `nil`  if grouped on a single line
