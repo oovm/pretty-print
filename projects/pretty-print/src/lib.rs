@@ -16,6 +16,7 @@ pub use crate::{blocks::k_and_r_bracket::KAndRBracket, providers::PrettyProvider
 use core::fmt::{Debug, Formatter};
 
 use std::{borrow::Cow, convert::TryInto, fmt::Display, ops::Add, rc::Rc};
+use std::ops::AddAssign;
 
 use termcolor::{ColorSpec, WriteColor};
 
@@ -24,7 +25,7 @@ mod render;
 
 // pub use self::block::{Affixes, BlockDoc};
 
-pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated, TermColored};
+pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated, terminal::TerminalWriter};
 
 /// The concrete document type. This type is not meant to be used directly. Instead use the static
 /// functions on `Doc` or the methods on an `DocAllocator`.
@@ -145,7 +146,7 @@ impl DocumentTree {
         match data.into() {
             Cow::Borrowed(s) => DocumentTree::StaticText(s),
             Cow::Owned(s) => DocumentTree::Text(Rc::from(s)),
-        }
+        }.with_utf8_len()
     }
 }
 
@@ -165,8 +166,8 @@ impl DocumentTree {
     /// Writes a rendered document to a `std::io::Write` object.
     #[inline]
     pub fn render<W>(&self, width: usize, out: &mut W) -> std::io::Result<()>
-    where
-        W: ?Sized + std::io::Write,
+        where
+            W: ?Sized + std::io::Write,
     {
         self.render_raw(width, &mut IoWrite::new(out))
     }
@@ -174,8 +175,8 @@ impl DocumentTree {
     /// Writes a rendered document to a `std::fmt::Write` object.
     #[inline]
     pub fn render_fmt<W>(&self, width: usize, out: &mut W) -> core::fmt::Result
-    where
-        W: ?Sized + core::fmt::Write,
+        where
+            W: ?Sized + core::fmt::Write,
     {
         self.render_raw(width, &mut FmtWrite::new(out))
     }
@@ -183,9 +184,9 @@ impl DocumentTree {
     /// Writes a rendered document to a `RenderAnnotated<A>` object.
     #[inline]
     pub fn render_raw<W>(&self, width: usize, out: &mut W) -> Result<(), W::Error>
-    where
-        for<'b> W: RenderAnnotated,
-        W: ?Sized,
+        where
+                for<'b> W: RenderAnnotated,
+                W: ?Sized,
     {
         render::best(self, width, out)
     }
@@ -207,16 +208,16 @@ impl DocumentTree {
 impl DocumentTree {
     #[inline]
     pub fn render_colored<W>(&self, width: usize, out: W) -> std::io::Result<()>
-    where
-        W: WriteColor,
+        where
+            W: WriteColor,
     {
-        render::best(self, width, &mut TermColored::new(out))
+        render::best(self, width, &mut TerminalWriter::new(out))
     }
 }
 
 impl<T> Add<T> for DocumentTree
-where
-    T: Into<DocumentTree>,
+    where
+        T: Into<DocumentTree>,
 {
     type Output = Self;
     fn add(self, rhs: T) -> Self::Output {
@@ -224,9 +225,18 @@ where
     }
 }
 
+impl<T> AddAssign<T> for DocumentTree
+    where
+        T: Into<DocumentTree>,
+{
+    fn add_assign(&mut self, rhs: T) {
+        *self = self.clone().append(rhs.into());
+    }
+}
+
 impl<T> From<Option<T>> for DocumentTree
-where
-    DocumentTree: From<T>,
+    where
+        DocumentTree: From<T>,
 {
     fn from(x: Option<T>) -> Self {
         match x {
@@ -298,8 +308,7 @@ impl DocumentTree {
         };
         if s.is_ascii() {
             self
-        }
-        else {
+        } else {
             let grapheme_len = s.graphemes(true).count();
             Self::RenderLen { len: grapheme_len, doc: Rc::new(self) }
         }
@@ -308,8 +317,8 @@ impl DocumentTree {
     /// Append the given document after this document.
     #[inline]
     pub fn append<E>(self, follow: E) -> Self
-    where
-        E: Into<DocumentTree>,
+        where
+            E: Into<DocumentTree>,
     {
         let rhs = follow.into();
         match (&self, &rhs) {
@@ -320,21 +329,15 @@ impl DocumentTree {
     }
 
     pub fn concat<I>(docs: I) -> Self
-    where
-        I: IntoIterator,
-        I::Item: Into<DocumentTree>,
+        where
+            I: IntoIterator,
+            I::Item: Into<DocumentTree>,
     {
-        let mut iter = docs.into_iter();
-        match iter.next() {
-            None => Self::Nil,
-            Some(doc) => {
-                let mut doc = doc.into();
-                for next in iter {
-                    doc = doc.append(next);
-                }
-                doc
-            }
+        let mut head = Self::Nil;
+        for item in docs.into_iter() {
+            head += item.into();
         }
+        head
     }
 
     /// Acts as `self` when laid out on multiple lines and acts as `that` when laid out on a single line.
@@ -357,8 +360,8 @@ impl DocumentTree {
     /// ```
     #[inline]
     pub fn flat_alt<E>(self, flat: E) -> Self
-    where
-        E: Into<DocumentTree>,
+        where
+            E: Into<DocumentTree>,
     {
         let rhs = flat.into();
 
@@ -401,8 +404,8 @@ impl DocumentTree {
 
     #[inline]
     pub fn union<E>(self, other: E) -> Self
-    where
-        E: Into<DocumentTree>,
+        where
+            E: Into<DocumentTree>,
     {
         Self::Union { left: Rc::new(self), right: Rc::new(other.into()) }
     }
@@ -531,9 +534,9 @@ impl DocumentTree {
     /// Puts `self` between `before` and `after`
     #[inline]
     pub fn enclose<E, F>(self, before: E, after: F) -> Self
-    where
-        E: Into<Self>,
-        F: Into<Self>,
+        where
+            E: Into<Self>,
+            F: Into<Self>,
     {
         before.into().append(self).append(after.into())
     }

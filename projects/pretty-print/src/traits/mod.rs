@@ -5,7 +5,7 @@ use termcolor::Buffer;
 /// Marker trait for types that can be pretty printed.
 pub trait PrettyPrint {
     /// Build a pretty tree for this type.
-    fn build<'a>(&self, allocator: &'a PrettyProvider) -> DocumentTree;
+    fn build(&self, allocator: &PrettyProvider) -> DocumentTree;
     /// Get a pretty string for this type.
     fn pretty_string(&self, width: usize) -> String {
         let arena = PrettyProvider::new();

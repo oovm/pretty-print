@@ -1,7 +1,8 @@
-
-use std::{cmp, fmt, io};
 use termcolor::{ColorSpec, WriteColor};
 use crate::DocumentTree;
+
+#[cfg(feature = "std")]
+pub mod terminal;
 
 /// Trait representing the operations necessary to render a document
 pub trait Render {
@@ -32,21 +33,21 @@ impl<W> IoWrite<W> {
 }
 
 impl<W> Render for IoWrite<W>
-where
-    W: io::Write,
+    where
+        W: std::io::Write,
 {
-    type Error = io::Error;
+    type Error = std::io::Error;
 
-    fn write_str(&mut self, s: &str) -> io::Result<usize> {
+    fn write_str(&mut self, s: &str) -> std::io::Result<usize> {
         self.upstream.write(s.as_bytes())
     }
 
-    fn write_str_all(&mut self, s: &str) -> io::Result<()> {
+    fn write_str_all(&mut self, s: &str) -> std::io::Result<()> {
         self.upstream.write_all(s.as_bytes())
     }
 
     fn fail_doc(&self) -> Self::Error {
-        io::Error::new(io::ErrorKind::Other, "Document failed to render")
+        std::io::Error::new(std::io::ErrorKind::Other, "Document failed to render")
     }
 }
 
@@ -62,33 +63,33 @@ impl<W> FmtWrite<W> {
 }
 
 impl<W> Render for FmtWrite<W>
-where
-    W: fmt::Write,
+    where
+        W: core::fmt::Write,
 {
-    type Error = fmt::Error;
+    type Error = std::fmt::Error;
 
-    fn write_str(&mut self, s: &str) -> Result<usize, fmt::Error> {
+    fn write_str(&mut self, s: &str) -> Result<usize, core::fmt::Error> {
         self.write_str_all(s).map(|_| s.len())
     }
 
-    fn write_str_all(&mut self, s: &str) -> fmt::Result {
+    fn write_str_all(&mut self, s: &str) -> core::fmt::Result {
         self.upstream.write_str(s)
     }
 
     fn fail_doc(&self) -> Self::Error {
-        fmt::Error
+        core::fmt::Error
     }
 }
 
 /// Trait representing the operations necessary to write an annotated document.
 pub trait RenderAnnotated: Render {
-    fn push_annotation<'a, 'b>(&'a mut self, annotation: &'b ColorSpec) -> Result<(), Self::Error>;
+    fn push_annotation(&mut self, annotation: &ColorSpec) -> Result<(), Self::Error>;
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 
 impl<W> RenderAnnotated for IoWrite<W>
-where
-    W: io::Write,
+    where
+        W: std::io::Write,
 {
     fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
         Ok(())
@@ -100,8 +101,8 @@ where
 }
 
 impl<W> RenderAnnotated for FmtWrite<W>
-where
-    W: fmt::Write,
+    where
+        W: core::fmt::Write,
 {
     fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
         Ok(())
@@ -109,56 +110,6 @@ where
 
     fn pop_annotation(&mut self) -> Result<(), Self::Error> {
         Ok(())
-    }
-}
-
-pub struct TermColored<W> {
-    color_stack: Vec<ColorSpec>,
-    upstream: W,
-}
-
-#[cfg(feature = "termcolor")]
-impl<W> TermColored<W> {
-    pub fn new(upstream: W) -> TermColored<W> {
-        TermColored { color_stack: Vec::new(), upstream }
-    }
-}
-
-#[cfg(feature = "termcolor")]
-impl<W> Render for TermColored<W>
-where
-    W: io::Write,
-{
-    type Error = io::Error;
-
-    fn write_str(&mut self, s: &str) -> io::Result<usize> {
-        self.upstream.write(s.as_bytes())
-    }
-
-    fn write_str_all(&mut self, s: &str) -> io::Result<()> {
-        self.upstream.write_all(s.as_bytes())
-    }
-
-    fn fail_doc(&self) -> Self::Error {
-        io::Error::new(io::ErrorKind::Other, "Document failed to render")
-    }
-}
-
-impl<W> RenderAnnotated for TermColored<W>
-where
-    W: WriteColor,
-{
-    fn push_annotation(&mut self, color: &ColorSpec) -> Result<(), Self::Error> {
-        self.color_stack.push(color.clone());
-        self.upstream.set_color(color)
-    }
-
-    fn pop_annotation(&mut self) -> Result<(), Self::Error> {
-        self.color_stack.pop();
-        match self.color_stack.last() {
-            Some(previous) => self.upstream.set_color(previous),
-            None => self.upstream.reset(),
-        }
     }
 }
 
@@ -178,9 +129,9 @@ impl<'a> BufferWrite<'a> {
     }
 
     fn render<W>(&mut self, render: &mut W) -> Result<(), W::Error>
-    where
-        W: RenderAnnotated,
-        W: ?Sized,
+        where
+            W: RenderAnnotated,
+            W: ?Sized,
     {
         let mut start = 0;
         for (end, annotation) in &self.annotations {
@@ -219,7 +170,7 @@ impl Render for BufferWrite<'_> {
 }
 
 impl RenderAnnotated for BufferWrite<'_> {
-    fn push_annotation<'a, 'b>(&'a mut self, annotation: &'b ColorSpec) -> Result<(), Self::Error> {
+    fn push_annotation(&mut self, annotation: &ColorSpec) -> Result<(), Self::Error> {
         todo!()
         // self.annotations
         //     .push((self.buffer.len(), Annotation::Push(annotation)));
@@ -265,10 +216,10 @@ fn append_docs<'a>(mut doc: &'a DocumentTree, consumer: &mut impl FnMut(&'a Docu
     }
 }
 
-pub fn best<'a, W>(doc: &'a DocumentTree, width: usize, out: &mut W) -> Result<(), W::Error>
-where
-    W: RenderAnnotated,
-    W: ?Sized,
+pub fn best<W>(doc: &DocumentTree, width: usize, out: &mut W) -> Result<(), W::Error>
+    where
+        W: RenderAnnotated,
+        W: ?Sized,
 {
     Best {
         pos: 0,
@@ -277,7 +228,7 @@ where
         annotation_levels: vec![],
         width,
     }
-    .best(0, out)?;
+        .best(0, out)?;
 
     Ok(())
 }
@@ -295,20 +246,20 @@ struct RenderCommand<'a> {
 }
 
 fn write_newline<W>(ind: usize, out: &mut W) -> Result<(), W::Error>
-where
-    W: ?Sized + Render,
+    where
+        W: ?Sized + Render,
 {
     out.write_str_all("\n")?;
     write_spaces(ind, out)
 }
 
 fn write_spaces<W>(spaces: usize, out: &mut W) -> Result<(), W::Error>
-where
-    W: ?Sized + Render,
+    where
+        W: ?Sized + Render,
 {
     let mut inserted = 0;
     while inserted < spaces {
-        let insert = cmp::min(SPACES.len(), spaces - inserted);
+        let insert = core::cmp::min(SPACES.len(), spaces - inserted);
         inserted += out.write_str(&SPACES[..insert])?;
     }
 
@@ -336,8 +287,7 @@ impl<'a> Best<'a> {
                     if bidx == 0 {
                         // All commands have been processed
                         return true;
-                    }
-                    else {
+                    } else {
                         bidx -= 1;
                         mode = Mode::Break;
                         self.back_cmds[bidx].node
@@ -390,7 +340,7 @@ impl<'a> Best<'a> {
 
                     DocumentTree::Column { column } => {
                         todo!();
-                        // doc = &column(pos);
+                        // doc = column(pos);
                         continue;
                     }
                     DocumentTree::Nesting { nesting } => {
@@ -413,9 +363,9 @@ impl<'a> Best<'a> {
     }
 
     fn best<W>(&mut self, top: usize, out: &mut W) -> Result<bool, W::Error>
-    where
-        W: RenderAnnotated,
-        W: ?Sized,
+        where
+            W: RenderAnnotated,
+            W: ?Sized,
     {
         let mut fits = true;
 
@@ -454,16 +404,14 @@ impl<'a> Best<'a> {
                         // this can be replaced
                         let new_ind = if *space >= 0 {
                             ind.saturating_add(*space as usize)
-                        }
-                        else {
+                        } else {
                             ind.saturating_sub(space.unsigned_abs())
                         };
                         cmd = RenderCommand { indent: new_ind, mode, node: doc };
                         continue;
                     }
                     DocumentTree::Hardline => {
-                        // The next document may have different indentation so we should use it if
-                        // we can
+                        // The next document may have different indentation so we should use it if we can
                         match self.back_cmds.pop() {
                             Some(next) => {
                                 write_newline(next.indent, out)?;
@@ -505,11 +453,6 @@ impl<'a> Best<'a> {
                         self.pos += s.len();
                         fits &= self.pos <= self.width;
                     }
-                    // Doc::SmallText(ref s) => {
-                    //     out.write_str_all(s)?;
-                    //     self.pos += s.len();
-                    //     fits &= self.pos <= self.width;
-                    // }
                     DocumentTree::Annotated { color, doc } => {
                         out.push_annotation(&color)?;
                         self.annotation_levels.push(self.back_cmds.len());

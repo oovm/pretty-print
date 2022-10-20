@@ -2,11 +2,10 @@ use crate::{DocumentTree, PrettyPrint};
 use alloc::borrow::Cow;
 use core::fmt::{Debug, Formatter};
 use termcolor::{Color, ColorSpec};
-use typed_arena::Arena;
 
 /// Represents a pretty-printable tree provider.
 pub struct PrettyProvider {
-    arena: Arena<ColorSpec>,
+    // arena: Arena<ColorSpec>,
     keyword: ColorSpec,
     string: ColorSpec,
     number: ColorSpec,
@@ -34,7 +33,6 @@ impl PrettyProvider {
         let local = Color::Rgb(152, 195, 121);
         let green = Color::Rgb(152, 195, 121);
         PrettyProvider {
-            arena: Arena::new(),
             keyword: ColorSpec::new().set_fg(Some(purple)).clone(),
             string: ColorSpec::new().set_fg(Some(green)).clone(),
             number: ColorSpec::new().set_fg(Some(Color::Rgb(206, 153, 100))).clone(),
