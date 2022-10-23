@@ -49,18 +49,6 @@ impl PrettyProvider {
 }
 
 impl<'a> PrettyProvider {
-    /// Creates a new pretty-printable tree provider.
-    pub fn nil(&'a self) -> DocumentTree {
-        todo!()
-    }
-    /// Creates a new pretty-printable tree provider.
-    pub fn space(&'a self) -> DocumentTree {
-        todo!()
-    }
-    /// Creates a new pretty-printable tree provider.
-    pub fn hardline(&'a self) -> DocumentTree {
-        todo!()
-    }
     /// Allocate a document containing the given text.
     ///
     /// The given text must not contain line breaks.

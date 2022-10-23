@@ -1,6 +1,6 @@
 [package]
 name = "pretty-print"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Aster <192607617@qq.com>"]
 description = "pretty print tree"
 repository = "https://github.com/oovm/pretty-print"

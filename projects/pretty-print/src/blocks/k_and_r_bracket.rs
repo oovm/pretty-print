@@ -1,3 +1,4 @@
+use crate::DocumentSequence;
 use super::*;
 
 /// `K & R` style brackets
@@ -37,26 +38,26 @@ impl KAndRBracket {
     where
         I: PrettyPrint,
     {
-        let mut output = Vec::with_capacity(5);
+        let mut output = DocumentSequence::new(5);
         if self.head_space {
-            output.push(allocator.space());
+            output.push(" ");
         }
         output.push(allocator.text(self.bracket_l));
         // inline
-        let mut inline = Vec::with_capacity(3);
-        inline.push(allocator.space());
+        let mut inline = DocumentSequence::new(3);
+        inline.push(" ");
         inline.push(allocator.intersperse(items, inline_join));
-        inline.push(allocator.space());
+        inline.push(" ");
         let inline = allocator.concat(inline);
         // block
-        let mut block = Vec::with_capacity(3);
-        block.push(allocator.hardline());
+        let mut block = DocumentSequence::new(3);
+        block.push(DocumentTree::Hardline);
         block.push(allocator.intersperse(items, block_join).indent(4));
-        block.push(allocator.hardline());
+        block.push(DocumentTree::Hardline);
         let block = allocator.concat(block);
         //
         output.push(block.flat_alt(inline));
         output.push(allocator.text(self.bracket_r));
-        allocator.concat(output)
+        output.into()
     }
 }
