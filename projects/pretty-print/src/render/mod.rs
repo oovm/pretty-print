@@ -1,6 +1,7 @@
 use crate::DocumentTree;
-use alloc::{string::String, vec, vec::Vec};
-use termcolor::{ColorSpec, WriteColor};
+use alloc::{rc::Rc, string::String, vec, vec::Vec};
+use color_ansi::AnsiStyle;
+use core::fmt::{Debug, Display, Formatter};
 #[cfg(feature = "std")]
 pub mod terminal;
 
@@ -21,9 +22,43 @@ pub trait Render {
     fn fail_doc(&self) -> Self::Error;
 }
 
+/// The given text, which must not contain line breaks.
+#[derive(Debug)]
+pub struct PrettyFormatter<'a> {
+    tree: &'a DocumentTree,
+    width: usize,
+}
+
+impl<'a> Display for PrettyFormatter<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        self.tree.render_fmt(self.width, f)
+    }
+}
+
+impl DocumentTree {
+    /// Returns a value which implements `std::fmt::Display`
+    ///
+    /// ```
+    /// use pretty::{BoxDoc, Doc};
+    /// let doc =
+    ///     BoxDoc::<()>::group(BoxDoc::text("hello").append(Doc::line()).append(Doc::text("world")));
+    /// assert_eq!(format!("{}", doc.pretty(80)), "hello world");
+    /// ```
+    #[inline]
+    pub fn pretty(&self, width: usize) -> PrettyFormatter {
+        PrettyFormatter { tree: self, width }
+    }
+}
+
 /// Writes to something implementing `std::io::Write`
 pub struct IoWrite<W> {
     upstream: W,
+}
+
+impl<W> Debug for IoWrite<W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IoWrite").finish()
+    }
 }
 
 impl<W> IoWrite<W> {
@@ -57,6 +92,12 @@ pub struct FmtWrite<W> {
     upstream: W,
 }
 
+impl<W> Debug for FmtWrite<W> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IoWrite").finish()
+    }
+}
+
 impl<W> FmtWrite<W> {
     pub fn new(upstream: W) -> FmtWrite<W> {
         FmtWrite { upstream }
@@ -84,7 +125,7 @@ where
 
 /// Trait representing the operations necessary to write an annotated document.
 pub trait RenderAnnotated: Render {
-    fn push_annotation(&mut self, annotation: &ColorSpec) -> Result<(), Self::Error>;
+    fn push_annotation(&mut self, annotation: Rc<AnsiStyle>) -> Result<(), Self::Error>;
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 
@@ -93,7 +134,7 @@ impl<W> RenderAnnotated for IoWrite<W>
 where
     W: std::io::Write,
 {
-    fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
+    fn push_annotation(&mut self, _: Rc<AnsiStyle>) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -106,7 +147,7 @@ impl<W> RenderAnnotated for FmtWrite<W>
 where
     W: core::fmt::Write,
 {
-    fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
+    fn push_annotation(&mut self, _: Rc<AnsiStyle>) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -115,17 +156,17 @@ where
     }
 }
 
-enum Annotation<'a, A> {
-    Push(&'a A),
+enum Annotation<A> {
+    Push(Rc<A>),
     Pop,
 }
 
-struct BufferWrite<'a> {
+struct BufferWrite {
     buffer: String,
-    annotations: Vec<(usize, Annotation<'a, ColorSpec>)>,
+    annotations: Vec<(usize, Annotation<AnsiStyle>)>,
 }
 
-impl<'a> BufferWrite<'a> {
+impl BufferWrite {
     fn new() -> Self {
         BufferWrite { buffer: String::new(), annotations: Vec::new() }
     }
@@ -143,7 +184,7 @@ impl<'a> BufferWrite<'a> {
             }
             start = *end;
             match annotation {
-                Annotation::Push(a) => render.push_annotation(a)?,
+                Annotation::Push(a) => render.push_annotation(a.clone())?,
                 Annotation::Pop => render.pop_annotation()?,
             }
         }
@@ -155,7 +196,7 @@ impl<'a> BufferWrite<'a> {
     }
 }
 
-impl Render for BufferWrite<'_> {
+impl Render for BufferWrite {
     type Error = ();
 
     fn write_str(&mut self, s: &str) -> Result<usize, Self::Error> {
@@ -171,12 +212,10 @@ impl Render for BufferWrite<'_> {
     fn fail_doc(&self) -> Self::Error {}
 }
 
-impl RenderAnnotated for BufferWrite<'_> {
-    fn push_annotation(&mut self, annotation: &ColorSpec) -> Result<(), Self::Error> {
-        todo!()
-        // self.annotations
-        //     .push((self.buffer.len(), Annotation::Push(annotation)));
-        // Ok(())
+impl RenderAnnotated for BufferWrite {
+    fn push_annotation(&mut self, annotation: Rc<AnsiColor>) -> Result<(), Self::Error> {
+        self.annotations.push((self.buffer.len(), Annotation::Push(annotation)));
+        Ok(())
     }
 
     fn pop_annotation(&mut self) -> Result<(), Self::Error> {
@@ -333,7 +372,7 @@ impl<'a> Best<'a> {
                     //         return false;
                     //     }
                     // }
-                    DocumentTree::FlatAlt { block: flat, inline } => {
+                    DocumentTree::MaybeInline { block: flat, inline } => {
                         doc = match mode {
                             Mode::Break => flat,
                             Mode::Flat => inline,
@@ -344,12 +383,12 @@ impl<'a> Best<'a> {
                     DocumentTree::Column { column } => {
                         todo!();
                         // doc = column(pos);
-                        continue;
+                        // continue;
                     }
                     DocumentTree::Nesting { nesting } => {
                         todo!();
                         // doc = &nesting(ind);
-                        continue;
+                        // continue;
                     }
                     DocumentTree::Nest { space: _, doc: next }
                     | DocumentTree::Group { items: next }
@@ -383,7 +422,7 @@ impl<'a> Best<'a> {
                             append_docs2(lhs, rhs, |doc| self.back_cmds.push(RenderCommand { indent: ind, mode, node: doc }));
                         continue;
                     }
-                    DocumentTree::FlatAlt { block, inline } => {
+                    DocumentTree::MaybeInline { block, inline } => {
                         cmd.node = match mode {
                             Mode::Break => block,
                             Mode::Flat => inline,
@@ -455,7 +494,7 @@ impl<'a> Best<'a> {
                         fits &= self.pos <= self.width;
                     }
                     DocumentTree::Annotated { color, doc } => {
-                        out.push_annotation(&color)?;
+                        out.push_annotation(color.clone())?;
                         self.annotation_levels.push(self.back_cmds.len());
                         cmd.node = doc;
                         continue;
@@ -483,12 +522,12 @@ impl<'a> Best<'a> {
                     DocumentTree::Column { column } => {
                         todo!();
                         // cmd.node = &column(self.pos);
-                        continue;
+                        // continue;
                     }
                     DocumentTree::Nesting { nesting } => {
                         todo!();
                         // cmd.node = &nesting(self.pos);
-                        continue;
+                        // continue;
                     }
                     DocumentTree::Fail => return Err(out.fail_doc()),
                 }

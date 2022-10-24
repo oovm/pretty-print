@@ -1,7 +1,6 @@
 #![allow(dead_code, unused)]
-use pretty_print::DocumentTree;
+use pretty_print::{Buffer, Color, ColorSpec, DocumentTree};
 use std::io::stdout;
-use termcolor::{Buffer, Color, ColorChoice, ColorSpec, StandardStream};
 
 #[test]
 fn ready() {

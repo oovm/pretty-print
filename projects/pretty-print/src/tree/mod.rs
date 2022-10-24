@@ -1,10 +1,9 @@
-use crate::{render, FmtWrite, PrettyBuilder, PrettyFormatter, RenderAnnotated};
+use crate::{render, FmtWrite, PrettyBuilder, PrettyPrint, PrettyProvider, RenderAnnotated};
 use alloc::{borrow::Cow, rc::Rc, string::String};
 use core::{
     fmt::{Debug, Formatter},
     ops::{Add, AddAssign},
 };
-use termcolor::{ColorSpec, WriteColor};
 use unicode_segmentation::UnicodeSegmentation;
 
 mod into;
@@ -16,23 +15,52 @@ mod into;
 /// it is used
 #[derive(Clone)]
 pub enum DocumentTree {
+    /// Nothing to show
     Nil,
-    Append { lhs: Rc<Self>, rhs: Rc<Self> },
-    // Sequence {
-    //     items: Vec<Self>,
-    // },
-    Group { items: Rc<Self> },
-    FlatAlt { block: Rc<Self>, inline: Rc<Self> },
-    Nest { space: isize, doc: Rc<Self> },
+    /// A hard line break
     Hardline,
-    // Stores the length of a string document that is not just ascii
-    RenderLen { len: usize, doc: Rc<Self> },
     Text(Rc<str>),
+    /// Concatenates two documents
     StaticText(&'static str),
-    Annotated { color: ColorSpec, doc: Rc<Self> },
-    Union { left: Rc<Self>, right: Rc<Self> },
-    Column { column: fn(usize) -> Self },
-    Nesting { nesting: fn(usize) -> Self },
+    Annotated {
+        color: Rc<ColorSpec>,
+        doc: Rc<Self>,
+    },
+    /// Concatenates two documents
+    Append {
+        lhs: Rc<Self>,
+        rhs: Rc<Self>,
+    },
+    /// Concatenates two documents with a space in between
+    Group {
+        items: Rc<Self>,
+    },
+    /// Concatenates two documents with a line in between
+    MaybeInline {
+        block: Rc<Self>,
+        inline: Rc<Self>,
+    },
+    /// Concatenates two documents with a line in between
+    Nest {
+        space: isize,
+        doc: Rc<Self>,
+    },
+    // Stores the length of a string document that is not just ascii
+    RenderLen {
+        len: usize,
+        doc: Rc<Self>,
+    },
+    Union {
+        left: Rc<Self>,
+        right: Rc<Self>,
+    },
+    Column {
+        column: fn(usize) -> Self,
+    },
+    Nesting {
+        nesting: fn(usize) -> Self,
+    },
+    /// Concatenates two documents with a line in between
     Fail,
 }
 
@@ -57,13 +85,13 @@ fn append_docs(mut doc: &DocumentTree, consumer: &mut impl FnMut(&DocumentTree))
 impl Debug for DocumentTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let is_line = |doc: &DocumentTree| match doc {
-            DocumentTree::FlatAlt { block: flat, inline: alt } => {
+            DocumentTree::MaybeInline { block: flat, inline: alt } => {
                 matches!((&**flat, &**alt), (DocumentTree::Hardline, DocumentTree::StaticText(" ")))
             }
             _ => false,
         };
         let is_line_ = |doc: &DocumentTree| match doc {
-            DocumentTree::FlatAlt { block: flat, inline: alt } => {
+            DocumentTree::MaybeInline { block: flat, inline: alt } => {
                 matches!((&**flat, &**alt), (DocumentTree::Hardline, DocumentTree::Nil))
             }
             _ => false,
@@ -79,7 +107,7 @@ impl Debug for DocumentTree {
             }
             _ if is_line(self) => f.debug_tuple("Line").finish(),
             _ if is_line_(self) => f.debug_tuple("Line_").finish(),
-            DocumentTree::FlatAlt { block, inline } => f.debug_tuple("FlatAlt").field(block).field(inline).finish(),
+            DocumentTree::MaybeInline { block, inline } => f.debug_tuple("FlatAlt").field(block).field(inline).finish(),
             DocumentTree::Group { items } => {
                 if is_line(self) {
                     return f.debug_tuple("SoftLine").finish();
@@ -155,23 +183,10 @@ impl DocumentTree {
     #[inline]
     pub fn render_raw<W>(&self, width: usize, out: &mut W) -> Result<(), W::Error>
     where
-        for<'b> W: RenderAnnotated,
+        W: RenderAnnotated,
         W: ?Sized,
     {
         render::best(self, width, out)
-    }
-
-    /// Returns a value which implements `std::fmt::Display`
-    ///
-    /// ```
-    /// use pretty::{BoxDoc, Doc};
-    /// let doc =
-    ///     BoxDoc::<()>::group(BoxDoc::text("hello").append(Doc::line()).append(Doc::text("world")));
-    /// assert_eq!(format!("{}", doc.pretty(80)), "hello world");
-    /// ```
-    #[inline]
-    pub fn pretty(&self, width: usize) -> PrettyFormatter {
-        PrettyFormatter { tree: self, width }
     }
 }
 
@@ -210,7 +225,13 @@ impl PrettyBuilder for DocumentTree {
     where
         E: Into<DocumentTree>,
     {
-        Self::FlatAlt { block: Rc::new(self), inline: Rc::new(flat.into()) }
+        Self::MaybeInline { block: Rc::new(self), inline: Rc::new(flat.into()) }
+    }
+}
+
+impl PrettyPrint for DocumentTree {
+    fn pretty(&self, _: &PrettyProvider) -> DocumentTree {
+        self.clone()
     }
 }
 
@@ -244,7 +265,26 @@ impl DocumentTree {
             _ => Self::Append { lhs: Rc::new(self), rhs: Rc::new(rhs) },
         }
     }
-
+    /// Allocate a document that intersperses the given separator `S` between the given documents
+    /// `[A, B, C, ..., Z]`, yielding `[A, S, B, S, C, S, ..., S, Z]`.
+    ///
+    /// Compare [the `intersperse` method from the `itertools` crate](https://docs.rs/itertools/0.5.9/itertools/trait.Itertools.html#method.intersperse).
+    ///
+    /// NOTE: The separator type, `S` may need to be cloned. Consider using cheaply cloneable ptr
+    /// like `RefDoc` or `RcDoc`
+    #[inline]
+    pub fn join<I, T>(terms: I, joint: T) -> DocumentTree
+    where
+        I: IntoIterator<Item = DocumentTree>,
+        T: Into<DocumentTree>,
+    {
+        let joint = joint.into();
+        let mut out = DocumentTree::Nil;
+        for term in terms.into_iter() {
+            out = out.append(joint.clone()).append(term);
+        }
+        out
+    }
     pub fn concat<I>(docs: I) -> Self
     where
         I: IntoIterator,
@@ -285,12 +325,12 @@ impl DocumentTree {
         }
         Self::Nest { space: offset, doc: Rc::new(self) }
     }
-
+    /// Mark this document as a comment.
     #[inline]
-    pub fn annotate(self, ann: ColorSpec) -> Self {
+    pub fn annotate(self, ann: Rc<ColorSpec>) -> Self {
         Self::Annotated { color: ann, doc: Rc::new(self) }
     }
-
+    /// Mark this document as a hard line break.
     #[inline]
     pub fn union<E>(self, other: E) -> Self
     where
@@ -430,24 +470,28 @@ impl DocumentTree {
         before.into().append(self).append(after.into())
     }
 
+    /// Puts `self` between `before` and `after` if `cond` is true
     pub fn single_quotes(self) -> Self {
         self.enclose("'", "'")
     }
 
+    /// Puts `self` between `before` and `after` if `cond` is true
     pub fn double_quotes(self) -> Self {
         self.enclose("\"", "\"")
     }
+    /// Puts `self` between `before` and `after` if `cond` is true
     pub fn parens(self) -> Self {
         self.enclose("(", ")")
     }
-
+    /// Puts `self` between `before` and `after` if `cond` is true
     pub fn angles(self) -> Self {
         self.enclose("<", ">")
     }
+    /// Puts `self` between `before` and `after` if `cond` is true
     pub fn braces(self) -> Self {
         self.enclose("{", "}")
     }
-
+    /// Puts `self` between `before` and `after` if `cond` is true
     pub fn brackets(self) -> Self {
         self.enclose("[", "]")
     }

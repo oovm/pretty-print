@@ -12,9 +12,10 @@ edition = "2021"
 exclude = ["package.json", "tests/**"]
 
 [dependencies.pretty-print]
-version = "0.1.0"
+version = "*"
 default-features = false
 features = ["std"]
+path = "../pretty-print"
 
 [dev-dependencies]
 

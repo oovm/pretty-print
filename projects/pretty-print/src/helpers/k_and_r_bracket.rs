@@ -46,12 +46,12 @@ impl KAndRBracket {
         // inline
         let mut inline = DocumentSequence::new(3);
         inline.push(" ");
-        inline.push(allocator.intersperse(items, inline_join));
+        inline.push(allocator.join(items, inline_join));
         inline.push(" ");
         // block
         let mut block = DocumentSequence::new(3);
         block.push(DocumentTree::Hardline);
-        block.push(allocator.intersperse(items, block_join).indent(4));
+        block.push(allocator.join(items, block_join).indent(4));
         block.push(DocumentTree::Hardline);
         //
         output.push(block.flat_alt(inline));

@@ -1,3 +1,5 @@
+#![doc = include_str!("readme.md")]
+
 use crate::{DocumentTree, PrettyPrint, PrettyProvider};
 use alloc::vec::Vec;
 use core::ops::AddAssign;

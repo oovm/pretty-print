@@ -1,6 +1,5 @@
 use crate::{providers::PrettyProvider, DocumentTree};
 use alloc::string::String;
-use termcolor::Buffer;
 
 pub trait PrettyBuilder {
     /// Acts as `self` when laid out on multiple lines and acts as `that` when laid out on a single line.
@@ -29,12 +28,12 @@ pub trait PrettyBuilder {
 /// Marker trait for types that can be pretty printed.
 pub trait PrettyPrint {
     /// Build a pretty tree for this type.
-    fn build(&self, allocator: &PrettyProvider) -> DocumentTree;
+    fn pretty(&self, allocator: &PrettyProvider) -> DocumentTree;
     /// Get a pretty string for this type.
     fn pretty_string(&self, width: usize) -> String {
         let arena = PrettyProvider::new();
         let mut buffer = String::new();
-        if let Err(e) = self.build(&arena).render_fmt(width, &mut buffer) {
+        if let Err(e) = self.pretty(&arena).render_fmt(width, &mut buffer) {
             return alloc::format!("Error: {}", e);
         }
         buffer
@@ -44,7 +43,7 @@ pub trait PrettyPrint {
     fn pretty_print(&self, width: usize) {
         let arena = PrettyProvider::new();
         let mut buffer = Buffer::ansi();
-        match self.build(&arena).render_colored(width, &mut buffer) {
+        match self.pretty(&arena).render_colored(width, &mut buffer) {
             Ok(_) => {
                 println!("{}", unsafe { String::from_utf8_unchecked(buffer.into_inner()) });
             }
