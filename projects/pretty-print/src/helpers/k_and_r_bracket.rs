@@ -1,5 +1,5 @@
-use crate::DocumentSequence;
 use super::*;
+use crate::PrettyBuilder;
 
 /// `K & R` style brackets
 ///
@@ -42,22 +42,20 @@ impl KAndRBracket {
         if self.head_space {
             output.push(" ");
         }
-        output.push(allocator.text(self.bracket_l));
+        output.push(self.bracket_l);
         // inline
         let mut inline = DocumentSequence::new(3);
         inline.push(" ");
         inline.push(allocator.intersperse(items, inline_join));
         inline.push(" ");
-        let inline = allocator.concat(inline);
         // block
         let mut block = DocumentSequence::new(3);
         block.push(DocumentTree::Hardline);
         block.push(allocator.intersperse(items, block_join).indent(4));
         block.push(DocumentTree::Hardline);
-        let block = allocator.concat(block);
         //
         output.push(block.flat_alt(inline));
-        output.push(allocator.text(self.bracket_r));
+        output.push(self.bracket_r);
         output.into()
     }
 }

@@ -1,6 +1,6 @@
-use termcolor::{ColorSpec, WriteColor};
 use crate::DocumentTree;
-
+use alloc::{string::String, vec, vec::Vec};
+use termcolor::{ColorSpec, WriteColor};
 #[cfg(feature = "std")]
 pub mod terminal;
 
@@ -32,9 +32,10 @@ impl<W> IoWrite<W> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<W> Render for IoWrite<W>
-    where
-        W: std::io::Write,
+where
+    W: std::io::Write,
 {
     type Error = std::io::Error;
 
@@ -63,10 +64,10 @@ impl<W> FmtWrite<W> {
 }
 
 impl<W> Render for FmtWrite<W>
-    where
-        W: core::fmt::Write,
+where
+    W: core::fmt::Write,
 {
-    type Error = std::fmt::Error;
+    type Error = core::fmt::Error;
 
     fn write_str(&mut self, s: &str) -> Result<usize, core::fmt::Error> {
         self.write_str_all(s).map(|_| s.len())
@@ -87,9 +88,10 @@ pub trait RenderAnnotated: Render {
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 
+#[cfg(feature = "std")]
 impl<W> RenderAnnotated for IoWrite<W>
-    where
-        W: std::io::Write,
+where
+    W: std::io::Write,
 {
     fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
         Ok(())
@@ -101,8 +103,8 @@ impl<W> RenderAnnotated for IoWrite<W>
 }
 
 impl<W> RenderAnnotated for FmtWrite<W>
-    where
-        W: core::fmt::Write,
+where
+    W: core::fmt::Write,
 {
     fn push_annotation(&mut self, _: &ColorSpec) -> Result<(), Self::Error> {
         Ok(())
@@ -129,9 +131,9 @@ impl<'a> BufferWrite<'a> {
     }
 
     fn render<W>(&mut self, render: &mut W) -> Result<(), W::Error>
-        where
-            W: RenderAnnotated,
-            W: ?Sized,
+    where
+        W: RenderAnnotated,
+        W: ?Sized,
     {
         let mut start = 0;
         for (end, annotation) in &self.annotations {
@@ -217,9 +219,9 @@ fn append_docs<'a>(mut doc: &'a DocumentTree, consumer: &mut impl FnMut(&'a Docu
 }
 
 pub fn best<W>(doc: &DocumentTree, width: usize, out: &mut W) -> Result<(), W::Error>
-    where
-        W: RenderAnnotated,
-        W: ?Sized,
+where
+    W: RenderAnnotated,
+    W: ?Sized,
 {
     Best {
         pos: 0,
@@ -228,7 +230,7 @@ pub fn best<W>(doc: &DocumentTree, width: usize, out: &mut W) -> Result<(), W::E
         annotation_levels: vec![],
         width,
     }
-        .best(0, out)?;
+    .best(0, out)?;
 
     Ok(())
 }
@@ -246,16 +248,16 @@ struct RenderCommand<'a> {
 }
 
 fn write_newline<W>(ind: usize, out: &mut W) -> Result<(), W::Error>
-    where
-        W: ?Sized + Render,
+where
+    W: ?Sized + Render,
 {
     out.write_str_all("\n")?;
     write_spaces(ind, out)
 }
 
 fn write_spaces<W>(spaces: usize, out: &mut W) -> Result<(), W::Error>
-    where
-        W: ?Sized + Render,
+where
+    W: ?Sized + Render,
 {
     let mut inserted = 0;
     while inserted < spaces {
@@ -287,7 +289,8 @@ impl<'a> Best<'a> {
                     if bidx == 0 {
                         // All commands have been processed
                         return true;
-                    } else {
+                    }
+                    else {
                         bidx -= 1;
                         mode = Mode::Break;
                         self.back_cmds[bidx].node
@@ -363,9 +366,9 @@ impl<'a> Best<'a> {
     }
 
     fn best<W>(&mut self, top: usize, out: &mut W) -> Result<bool, W::Error>
-        where
-            W: RenderAnnotated,
-            W: ?Sized,
+    where
+        W: RenderAnnotated,
+        W: ?Sized,
     {
         let mut fits = true;
 
@@ -401,7 +404,8 @@ impl<'a> Best<'a> {
                         // this can be replaced
                         let new_ind = if *space >= 0 {
                             ind.saturating_add(*space as usize)
-                        } else {
+                        }
+                        else {
                             ind.saturating_sub(space.unsigned_abs())
                         };
                         cmd = RenderCommand { indent: new_ind, mode, node: doc };

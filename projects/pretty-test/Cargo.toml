@@ -1,5 +1,5 @@
 [package]
-name = "sub_projects"
+name = "pretty-test"
 publish = false
 version = "0.0.0"
 authors = ["Aster <192607617@qq.com>"]
@@ -11,7 +11,10 @@ license = "MPL-2.0"
 edition = "2021"
 exclude = ["package.json", "tests/**"]
 
-[dependencies]
+[dependencies.pretty-print]
+version = "0.1.0"
+default-features = false
+features = ["std"]
 
 [dev-dependencies]
 

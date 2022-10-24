@@ -48,123 +48,90 @@ impl PrettyProvider {
     }
 }
 
-impl<'a> PrettyProvider {
+impl PrettyProvider {
     /// Allocate a document containing the given text.
-    ///
-    /// The given text must not contain line breaks.
-    pub fn text<'i, S>(&'a self, text: S) -> DocumentTree
+    pub fn keyword<S>(&self, text: S) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        todo!()
-        // self.arena.text(text.into())
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn keyword<'i, S>(&'a self, text: S) -> DocumentTree
+    pub fn identifier<S>(&self, text: S) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        self.text(text).annotate(self.keyword.clone())
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn identifier<'i, S>(&'a self, text: S) -> DocumentTree
+    pub fn generic<S>(&self, text: S) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        self.operator(text)
-    }
-    /// Allocate a document containing the given text.
-    pub fn generic<'i, S>(&'a self, text: S) -> DocumentTree
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
-    {
-        self.text(text).annotate(self.macros.clone())
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
 
     /// Allocate a document containing the given text.
-    pub fn variable<'i, S>(&'a self, text: S, mutable: bool) -> DocumentTree
+    pub fn variable<S>(&self, text: S, mutable: bool) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        if mutable { self.text(text).annotate(self.local_mut.clone()) } else { self.text(text).annotate(self.local.clone()) }
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
 
     /// Allocate a document containing the given text.
-    pub fn argument<'i, S>(&'a self, text: S, mutable: bool) -> DocumentTree
+    pub fn argument<S>(&self, text: S, mutable: bool) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        if mutable {
-            self.text(text).annotate(self.argument_mut.clone())
-        }
-        else {
-            self.text(text).annotate(self.argument.clone())
-        }
-    }
-    /// Allocate a document containing the given text.
-    pub fn operator<'i, S>(&'a self, text: S) -> DocumentTree
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
-    {
-        self.text(text).annotate(self.operator.clone())
-    }
-    /// Allocate a document containing the given text.
-    pub fn string<'i, S>(&'a self, text: S) -> DocumentTree
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
-    {
-        self.text(text).annotate(self.string.clone())
-    }
-    /// Allocate a document containing the given text.
-    pub fn metadata<'i, S>(&'a self, text: S) -> DocumentTree
-    where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
-    {
-        self.text(text).annotate(self.macros.clone())
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
 
     /// Allocate a document containing the given text.
-    pub fn number<'i, S>(&'a self, text: S) -> DocumentTree
+    pub fn operator<S>(&self, text: S) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        self.text(text).annotate(self.number.clone())
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn structure<'i, S>(&'a self, text: S) -> DocumentTree
+    pub fn string<S>(&self, text: S) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        self.text(text).annotate(self.structure.clone())
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn interface<'i, S>(&'a self, text: S) -> DocumentTree
+    pub fn metadata<S>(&self, text: S) -> DocumentTree
     where
-        S: Into<Cow<'i, str>>,
-        'i: 'a,
+        S: Into<Cow<'static, str>>,
     {
-        self.text(text).annotate(self.interface.clone())
+        DocumentTree::text(text).annotate(self.keyword.clone())
+    }
+    /// Allocate a document containing the given text.
+    pub fn number<S>(&self, text: S) -> DocumentTree
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        DocumentTree::text(text).annotate(self.keyword.clone())
+    }
+    /// Allocate a document containing the given text.
+    pub fn structure<S>(&self, text: S) -> DocumentTree
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        DocumentTree::text(text).annotate(self.keyword.clone())
+    }
+    /// Allocate a document containing the given text.
+    pub fn interface<S>(&self, text: S) -> DocumentTree
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        DocumentTree::text(text).annotate(self.keyword.clone())
     }
 }
 
 impl<'a> PrettyProvider {
-    /// Allocate a document concatenating the given documents.
-    #[inline]
-    pub fn concat<I>(&'a self, docs: I) -> DocumentTree {
-        todo!()
-        // self.arena.concat(docs)
-    }
     /// Allocate a document that intersperses the given separator `S` between the given documents
     /// `[A, B, C, ..., Z]`, yielding `[A, S, B, S, C, S, ..., S, Z]`.
     ///

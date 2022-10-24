@@ -1,4 +1,4 @@
-// #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 // #![deny(missing_debug_implementations, missing_copy_implementations)]
 // #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 #![doc = include_str!("../readme.md")]
@@ -6,29 +6,22 @@
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oovm/shape-rs/dev/projects/images/Trapezohedron.svg")]
 
 extern crate alloc;
+extern crate core;
 
-
-mod blocks;
+pub mod helpers;
 mod providers;
 mod traits;
 
-pub use crate::{blocks::k_and_r_bracket::KAndRBracket, providers::PrettyProvider, traits::PrettyPrint};
-use core::fmt::{Debug, Formatter};
-
-use std::{borrow::Cow, convert::TryInto, fmt::Display, ops::Add, rc::Rc};
-use std::ops::AddAssign;
-
+pub use crate::{providers::PrettyProvider, traits::PrettyPrint};
+use core::fmt::{Display, Formatter};
 use termcolor::{ColorSpec, WriteColor};
-
-// pub mod block;
 mod render;
 mod tree;
+pub use self::render::{FmtWrite, Render, RenderAnnotated};
+pub use crate::{traits::PrettyBuilder, tree::DocumentTree};
 
-pub use crate::tree::{DocumentTree, DocumentSequence};
-
-// pub use self::block::{Affixes, BlockDoc};
-
-pub use self::render::{FmtWrite, IoWrite, Render, RenderAnnotated, terminal::TerminalWriter};
+#[cfg(feature = "std")]
+pub use crate::render::{terminal::TerminalWriter, IoWrite};
 
 /// The given text, which must not contain line breaks.
 pub struct PrettyFormatter<'a> {

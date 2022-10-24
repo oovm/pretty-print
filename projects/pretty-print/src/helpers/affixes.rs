@@ -1,4 +1,4 @@
-//! Document formatting of "blocks" such as where some number of prefixes and suffixes would
+//! Document formatting of "helpers" such as where some number of prefixes and suffixes would
 //! ideally be layed out onto a single line instead of breaking them up into multiple lines. See
 //! `BlockDoc` for an example
 
