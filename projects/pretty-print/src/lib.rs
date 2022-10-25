@@ -22,6 +22,7 @@ pub use crate::{
     traits::{PrettyBuilder, PrettyPrint},
     tree::DocumentTree,
 };
+pub use color_ansi::*;
 
 /// Concatenates a number of documents (or values that can be converted into a document via the
 /// `Pretty` trait, like `&str`)

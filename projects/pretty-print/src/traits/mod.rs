@@ -42,10 +42,10 @@ pub trait PrettyPrint {
     #[cfg(feature = "std")]
     fn pretty_print(&self, width: usize) {
         let arena = PrettyProvider::new();
-        let mut buffer = Buffer::ansi();
+        let mut buffer = std::io::stdout().lock();
         match self.pretty(&arena).render_colored(width, &mut buffer) {
             Ok(_) => {
-                println!("{}", unsafe { String::from_utf8_unchecked(buffer.into_inner()) });
+                // println!("{}", unsafe { String::from_utf8_unchecked(buffer) });
             }
             Err(e) => {
                 eprintln!("Error: {}", e);

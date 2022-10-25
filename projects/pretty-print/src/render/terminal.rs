@@ -1,10 +1,9 @@
 use crate::{Render, RenderAnnotated};
 use alloc::rc::Rc;
-use color_ansi::{AnsiStyle, AnsiWriter};
+use color_ansi::{AnsiAbility, AnsiColor, AnsiStyle, AnsiWriter};
 use core::fmt::{Debug, Formatter};
 use std::io::{Error, ErrorKind, Write};
 pub struct TerminalWriter<W> {
-    color: bool,
     color_stack: Vec<Rc<AnsiStyle>>,
     upstream: AnsiWriter<W>,
 }
@@ -15,12 +14,13 @@ impl<W> Debug for TerminalWriter<W> {
     }
 }
 
-impl<W> TerminalWriter<W> {
+impl<W: Write> TerminalWriter<W> {
     pub fn new(upstream: W) -> Self {
-        TerminalWriter { color: true, color_stack: Vec::new(), upstream }
+        TerminalWriter { color_stack: Vec::new(), upstream: AnsiWriter::new(upstream) }
     }
-    pub fn with_color(self, color: bool) -> Self {
-        TerminalWriter { color, ..self }
+    pub fn with_color(mut self, color: AnsiAbility) -> Self {
+        self.upstream.set_ability(color);
+        self
     }
 }
 
@@ -43,17 +43,17 @@ where
     }
 }
 
-impl<W> RenderAnnotated for TerminalWriter<W> {
+impl<W: Write> RenderAnnotated for TerminalWriter<W> {
     fn push_annotation(&mut self, color: Rc<AnsiStyle>) -> Result<(), Self::Error> {
         self.color_stack.push(color.clone());
-        self.upstream.set_color(&color)
+        self.upstream.set_style(&color)
     }
 
     fn pop_annotation(&mut self) -> Result<(), Self::Error> {
         self.color_stack.pop();
         match self.color_stack.last() {
-            Some(previous) => self.upstream.set_color(previous),
-            None => self.upstream.reset(),
+            Some(previous) => self.upstream.set_style(previous),
+            None => self.upstream.reset_style(),
         }
     }
 }

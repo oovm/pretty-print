@@ -1,9 +1,11 @@
 use crate::{render, FmtWrite, PrettyBuilder, PrettyPrint, PrettyProvider, RenderAnnotated};
 use alloc::{borrow::Cow, rc::Rc, string::String};
+use color_ansi::AnsiStyle;
 use core::{
     fmt::{Debug, Formatter},
     ops::{Add, AddAssign},
 };
+use std::io::Write;
 use unicode_segmentation::UnicodeSegmentation;
 
 mod into;
@@ -23,7 +25,7 @@ pub enum DocumentTree {
     /// Concatenates two documents
     StaticText(&'static str),
     Annotated {
-        color: Rc<ColorSpec>,
+        color: Rc<AnsiStyle>,
         doc: Rc<Self>,
     },
     /// Concatenates two documents
@@ -193,10 +195,7 @@ impl DocumentTree {
 impl DocumentTree {
     #[inline]
     #[cfg(feature = "std")]
-    pub fn render_colored<W>(&self, width: usize, out: W) -> std::io::Result<()>
-    where
-        W: WriteColor,
-    {
+    pub fn render_colored<W: Write>(&self, width: usize, out: W) -> std::io::Result<()> {
         render::best(self, width, &mut crate::TerminalWriter::new(out))
     }
 }
@@ -327,8 +326,8 @@ impl DocumentTree {
     }
     /// Mark this document as a comment.
     #[inline]
-    pub fn annotate(self, ann: Rc<ColorSpec>) -> Self {
-        Self::Annotated { color: ann, doc: Rc::new(self) }
+    pub fn annotate(self, style: Rc<AnsiStyle>) -> Self {
+        Self::Annotated { color: style, doc: Rc::new(self) }
     }
     /// Mark this document as a hard line break.
     #[inline]

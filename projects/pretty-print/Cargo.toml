@@ -16,6 +16,7 @@ unicode-segmentation = "1.10.1"
 version = "0.0.0"
 #default-features = false
 #features = ["termcolor"]
+path = 'C:\Users\Dell\CLionProjects\color-rs\projects\color-ansi'
 
 [dev-dependencies]
 

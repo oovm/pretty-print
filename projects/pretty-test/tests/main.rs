@@ -1,6 +1,6 @@
 #![allow(dead_code, unused)]
-use pretty_print::{Buffer, Color, ColorSpec, DocumentTree};
-use std::io::stdout;
+use pretty_print::{AnsiColor, AnsiStyle, DocumentTree};
+use std::{io::stdout, rc::Rc};
 
 #[test]
 fn ready() {
@@ -10,15 +10,15 @@ fn ready() {
 #[test]
 fn box1() {
     let doc = DocumentTree::text("hello")
-        .annotate(ColorSpec::new().set_fg(Some(Color::Red)).clone())
+        .annotate(Rc::new(AnsiStyle::new(AnsiColor::Red)))
         .append(DocumentTree::Hardline)
         .append("a")
         .append(" ")
         .append("world");
-    let mut buffer = Buffer::ansi();
+    let mut buffer = vec![];
     doc.render_colored(10, &mut buffer).unwrap();
 
-    println!("{}", String::from_utf8_lossy(&buffer.into_inner()));
+    println!("{}", String::from_utf8_lossy(&buffer));
 }
 
 #[test]

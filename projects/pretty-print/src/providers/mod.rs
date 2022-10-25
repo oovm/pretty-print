@@ -28,21 +28,19 @@ impl PrettyProvider {
     /// Creates a new pretty-printable tree provider.
     pub fn new() -> Self {
         let argument = AnsiColor::Rgb(239, 112, 117);
-        let purple = AnsiColor::Rgb(197, 119, 207);
         let local = AnsiColor::Rgb(152, 195, 121);
-        let green = AnsiColor::Rgb(152, 195, 121);
         PrettyProvider {
-            keyword: AnsiStyle::rgb(197, 119, 207).set_fg(Some(purple)).clone(),
-            string: AnsiStyle::rgb().set_fg(Some(green)).clone(),
-            number: AnsiStyle::rgb().set_fg(Some(Color::Rgb(206, 153, 100))).clone(),
-            macros: AnsiStyle::rgb().set_fg(Some(Color::Rgb(87, 182, 194))).clone(),
-            argument: AnsiStyle::rgb().set_fg(Some(argument)).clone(),
-            argument_mut: AnsiStyle::rgb().set_fg(Some(argument)).set_underline(true).clone(),
-            local: AnsiStyle::rgb().set_fg(Some(local)).clone(),
-            local_mut: AnsiStyle::rgb().set_fg(Some(local)).set_underline(true).clone(),
-            operator: AnsiStyle::rgb().set_fg(Some(Color::Rgb(90, 173, 238))).clone(),
-            structure: AnsiStyle::rgb().set_fg(Some(Color::Rgb(197, 119, 207))).clone(),
-            interface: AnsiStyle::rgb().set_fg(Some(Color::Rgb(197, 119, 207))).clone(),
+            keyword: AnsiStyle::rgb(197, 119, 207).into(),
+            string: AnsiStyle::rgb(152, 195, 121).into(),
+            number: AnsiStyle::rgb(206, 153, 100).into(),
+            macros: AnsiStyle::rgb(87, 182, 194).into(),
+            argument: AnsiStyle::rgb(239, 112, 117).into(),
+            argument_mut: AnsiStyle::rgb(239, 112, 117).into(),
+            local: AnsiStyle::rgb(152, 195, 121).into(),
+            local_mut: AnsiStyle::rgb(152, 195, 121).into(),
+            operator: AnsiStyle::rgb(90, 173, 238).into(),
+            structure: AnsiStyle::rgb(197, 119, 207).into(),
+            interface: AnsiStyle::rgb(197, 119, 207).into(),
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::DocumentTree;
 use alloc::{rc::Rc, string::String, vec, vec::Vec};
-use color_ansi::AnsiStyle;
+use color_ansi::{AnsiColor, AnsiStyle};
 use core::fmt::{Debug, Display, Formatter};
 #[cfg(feature = "std")]
 pub mod terminal;
@@ -213,7 +213,7 @@ impl Render for BufferWrite {
 }
 
 impl RenderAnnotated for BufferWrite {
-    fn push_annotation(&mut self, annotation: Rc<AnsiColor>) -> Result<(), Self::Error> {
+    fn push_annotation(&mut self, annotation: Rc<AnsiStyle>) -> Result<(), Self::Error> {
         self.annotations.push((self.buffer.len(), Annotation::Push(annotation)));
         Ok(())
     }
