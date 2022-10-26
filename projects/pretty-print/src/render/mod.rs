@@ -1,6 +1,6 @@
 use crate::DocumentTree;
 use alloc::{rc::Rc, string::String, vec, vec::Vec};
-use color_ansi::{AnsiColor, AnsiStyle};
+use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Display, Formatter};
 #[cfg(feature = "std")]
 pub mod terminal;

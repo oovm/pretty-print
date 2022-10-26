@@ -1,6 +1,6 @@
 use crate::{Render, RenderAnnotated};
 use alloc::rc::Rc;
-use color_ansi::{AnsiAbility, AnsiColor, AnsiStyle, AnsiWriter};
+use color_ansi::{AnsiAbility, AnsiStyle, AnsiWriter};
 use core::fmt::{Debug, Formatter};
 use std::io::{Error, ErrorKind, Write};
 pub struct TerminalWriter<W> {

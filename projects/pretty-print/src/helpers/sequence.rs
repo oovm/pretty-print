@@ -1,6 +1,6 @@
 use super::*;
-use crate::PrettyBuilder;
 
+/// The document sequence type.
 #[derive(Clone, Debug, Default)]
 pub struct DocumentSequence {
     items: Vec<DocumentTree>,

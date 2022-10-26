@@ -1,6 +1,6 @@
 use crate::{DocumentTree, PrettyPrint};
 use alloc::{borrow::Cow, rc::Rc};
-use color_ansi::{AnsiColor, AnsiStyle};
+use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Formatter};
 /// Represents a pretty-printable tree provider.
 pub struct PrettyProvider {
@@ -27,17 +27,15 @@ impl<'a> Debug for PrettyProvider {
 impl PrettyProvider {
     /// Creates a new pretty-printable tree provider.
     pub fn new() -> Self {
-        let argument = AnsiColor::Rgb(239, 112, 117);
-        let local = AnsiColor::Rgb(152, 195, 121);
         PrettyProvider {
             keyword: AnsiStyle::rgb(197, 119, 207).into(),
             string: AnsiStyle::rgb(152, 195, 121).into(),
             number: AnsiStyle::rgb(206, 153, 100).into(),
             macros: AnsiStyle::rgb(87, 182, 194).into(),
             argument: AnsiStyle::rgb(239, 112, 117).into(),
-            argument_mut: AnsiStyle::rgb(239, 112, 117).into(),
+            argument_mut: AnsiStyle::rgb(239, 112, 117).with_underline().into(),
             local: AnsiStyle::rgb(152, 195, 121).into(),
-            local_mut: AnsiStyle::rgb(152, 195, 121).into(),
+            local_mut: AnsiStyle::rgb(152, 195, 121).with_underline().into(),
             operator: AnsiStyle::rgb(90, 173, 238).into(),
             structure: AnsiStyle::rgb(197, 119, 207).into(),
             interface: AnsiStyle::rgb(197, 119, 207).into(),
