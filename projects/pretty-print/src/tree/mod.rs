@@ -15,8 +15,7 @@ mod into;
 ///
 /// The `T` parameter is used to abstract over pointers to `Doc`. See `RefDoc` and `BoxDoc` for how
 /// it is used
-#[derive(Clone)]
-pub enum DocumentTree {
+pub enum PrettyTree {
     /// Nothing to show
     Nil,
     /// A hard line break
@@ -57,25 +56,46 @@ pub enum DocumentTree {
         right: Rc<Self>,
     },
     Column {
-        column: fn(usize) -> Self,
+        column: Rc<dyn Fn(usize) -> Self>,
     },
     Nesting {
-        nesting: fn(usize) -> Self,
+        nesting: Rc<dyn Fn(usize) -> Self>,
     },
     /// Concatenates two documents with a line in between
     Fail,
 }
 
-impl Default for DocumentTree {
+impl Clone for PrettyTree {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Nil => Self::Nil,
+            Self::Hardline => Self::Hardline,
+            Self::Text(s) => Self::Text(s.clone()),
+            Self::StaticText(s) => Self::StaticText(*s),
+            Self::Annotated { color, doc } => Self::Annotated { color: color.clone(), doc: doc.clone() },
+            Self::Append { lhs, rhs } => Self::Append { lhs: lhs.clone(), rhs: rhs.clone() },
+            Self::Group { items } => Self::Group { items: items.clone() },
+            Self::MaybeInline { block, inline } => Self::MaybeInline { block: block.clone(), inline: inline.clone() },
+            Self::Nest { space, doc } => Self::Nest { space: *space, doc: doc.clone() },
+            Self::RenderLen { len, doc } => Self::RenderLen { len: *len, doc: doc.clone() },
+            Self::Union { left, right } => Self::Union { left: left.clone(), right: right.clone() },
+            Self::Column { column } => Self::Column { column: column.clone() },
+            Self::Nesting { nesting } => Self::Nesting { nesting: nesting.clone() },
+            Self::Fail => Self::Fail,
+        }
+    }
+}
+
+impl Default for PrettyTree {
     fn default() -> Self {
         Self::Nil
     }
 }
 
-fn append_docs(mut doc: &DocumentTree, consumer: &mut impl FnMut(&DocumentTree)) {
+fn append_docs(mut doc: &PrettyTree, consumer: &mut impl FnMut(&PrettyTree)) {
     loop {
         match doc {
-            DocumentTree::Append { lhs, rhs } => {
+            PrettyTree::Append { lhs, rhs } => {
                 append_docs(lhs, consumer);
                 doc = rhs;
             }
@@ -84,23 +104,23 @@ fn append_docs(mut doc: &DocumentTree, consumer: &mut impl FnMut(&DocumentTree))
     }
 }
 
-impl Debug for DocumentTree {
+impl Debug for PrettyTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let is_line = |doc: &DocumentTree| match doc {
-            DocumentTree::MaybeInline { block: flat, inline: alt } => {
-                matches!((&**flat, &**alt), (DocumentTree::Hardline, DocumentTree::StaticText(" ")))
+        let is_line = |doc: &PrettyTree| match doc {
+            PrettyTree::MaybeInline { block: flat, inline: alt } => {
+                matches!((&**flat, &**alt), (PrettyTree::Hardline, PrettyTree::StaticText(" ")))
             }
             _ => false,
         };
-        let is_line_ = |doc: &DocumentTree| match doc {
-            DocumentTree::MaybeInline { block: flat, inline: alt } => {
-                matches!((&**flat, &**alt), (DocumentTree::Hardline, DocumentTree::Nil))
+        let is_line_ = |doc: &PrettyTree| match doc {
+            PrettyTree::MaybeInline { block: flat, inline: alt } => {
+                matches!((&**flat, &**alt), (PrettyTree::Hardline, PrettyTree::Nil))
             }
             _ => false,
         };
         match self {
-            DocumentTree::Nil => f.debug_tuple("Nil").finish(),
-            DocumentTree::Append { lhs: base, rhs: rest } => {
+            PrettyTree::Nil => f.debug_tuple("Nil").finish(),
+            PrettyTree::Append { lhs: base, rhs: rest } => {
                 let mut f = f.debug_list();
                 append_docs(self, &mut |doc| {
                     f.entry(doc);
@@ -109,8 +129,8 @@ impl Debug for DocumentTree {
             }
             _ if is_line(self) => f.debug_tuple("Line").finish(),
             _ if is_line_(self) => f.debug_tuple("Line_").finish(),
-            DocumentTree::MaybeInline { block, inline } => f.debug_tuple("FlatAlt").field(block).field(inline).finish(),
-            DocumentTree::Group { items } => {
+            PrettyTree::MaybeInline { block, inline } => f.debug_tuple("FlatAlt").field(block).field(inline).finish(),
+            PrettyTree::Group { items } => {
                 if is_line(self) {
                     return f.debug_tuple("SoftLine").finish();
                 }
@@ -119,23 +139,23 @@ impl Debug for DocumentTree {
                 }
                 f.debug_tuple("Group").field(items).finish()
             }
-            DocumentTree::Nest { space, doc } => f.debug_tuple("Nest").field(&space).field(doc).finish(),
-            DocumentTree::Hardline => f.debug_tuple("Hardline").finish(),
-            DocumentTree::RenderLen { doc, .. } => doc.fmt(f),
-            DocumentTree::Text(s) => Debug::fmt(s, f),
-            DocumentTree::StaticText(s) => Debug::fmt(s, f),
-            DocumentTree::Annotated { color, doc } => f.debug_tuple("Annotated").field(color).field(doc).finish(),
-            DocumentTree::Union { left, right } => f.debug_tuple("Union").field(left).field(right).finish(),
-            DocumentTree::Column { .. } => f.debug_tuple("Column(..)").finish(),
-            DocumentTree::Nesting { .. } => f.debug_tuple("Nesting(..)").finish(),
-            DocumentTree::Fail => f.debug_tuple("Fail").finish(),
+            PrettyTree::Nest { space, doc } => f.debug_tuple("Nest").field(&space).field(doc).finish(),
+            PrettyTree::Hardline => f.debug_tuple("Hardline").finish(),
+            PrettyTree::RenderLen { doc, .. } => doc.fmt(f),
+            PrettyTree::Text(s) => Debug::fmt(s, f),
+            PrettyTree::StaticText(s) => Debug::fmt(s, f),
+            PrettyTree::Annotated { color, doc } => f.debug_tuple("Annotated").field(color).field(doc).finish(),
+            PrettyTree::Union { left, right } => f.debug_tuple("Union").field(left).field(right).finish(),
+            PrettyTree::Column { .. } => f.debug_tuple("Column(..)").finish(),
+            PrettyTree::Nesting { .. } => f.debug_tuple("Nesting(..)").finish(),
+            PrettyTree::Fail => f.debug_tuple("Fail").finish(),
         }
     }
 }
 
 #[allow(non_upper_case_globals)]
-impl DocumentTree {
-    pub const Space: Self = DocumentTree::StaticText(" ");
+impl PrettyTree {
+    pub const Space: Self = PrettyTree::StaticText(" ");
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
     #[inline]
     pub fn line() -> Self {
@@ -149,19 +169,19 @@ impl DocumentTree {
     }
 }
 
-impl DocumentTree {
+impl PrettyTree {
     /// The given text, which must not contain line breaks.
     #[inline]
     pub fn text<U: Into<Cow<'static, str>>>(data: U) -> Self {
         match data.into() {
-            Cow::Borrowed(s) => DocumentTree::StaticText(s),
-            Cow::Owned(s) => DocumentTree::Text(Rc::from(s)),
+            Cow::Borrowed(s) => PrettyTree::StaticText(s),
+            Cow::Owned(s) => PrettyTree::Text(Rc::from(s)),
         }
         .with_utf8_len()
     }
 }
 
-impl DocumentTree {
+impl PrettyTree {
     /// Writes a rendered document to a `std::io::Write` object.
     #[inline]
     #[cfg(feature = "std")]
@@ -192,7 +212,7 @@ impl DocumentTree {
     }
 }
 
-impl DocumentTree {
+impl PrettyTree {
     #[inline]
     #[cfg(feature = "std")]
     pub fn render_colored<W: Write>(&self, width: usize, out: W) -> std::io::Result<()> {
@@ -200,7 +220,7 @@ impl DocumentTree {
     }
 }
 
-impl PrettyBuilder for DocumentTree {
+impl PrettyBuilder for PrettyTree {
     /// Acts as `self` when laid out on multiple lines and acts as `that` when laid out on a single line.
     ///
     /// ```
@@ -222,19 +242,57 @@ impl PrettyBuilder for DocumentTree {
     #[inline]
     fn flat_alt<E>(self, flat: E) -> Self
     where
-        E: Into<DocumentTree>,
+        E: Into<PrettyTree>,
     {
         Self::MaybeInline { block: Rc::new(self), inline: Rc::new(flat.into()) }
     }
+    /// Indents `self` by `adjust` spaces from the current cursor position
+    ///
+    /// NOTE: The doc pointer type, `D` may need to be cloned. Consider using cheaply cloneable ptr
+    /// like `RefDoc` or `RcDoc`
+    ///
+    /// ```rust
+    /// use pretty::DocAllocator;
+    ///
+    /// let arena = pretty::Arena::<()>::new();
+    /// let doc = arena
+    ///     .text("prefix")
+    ///     .append(arena.text(" "))
+    ///     .append(arena.reflow("The indent function indents these words!").indent(4));
+    /// assert_eq!(
+    ///     doc.1.pretty(24).to_string(),
+    ///     "
+    /// prefix     The indent
+    ///            function
+    ///            indents these
+    ///            words!"
+    ///         .trim_start(),
+    /// );
+    /// ```
+    #[inline]
+    fn indent(self, adjust: usize) -> Self {
+        let spaces = {
+            use crate::render::SPACES;
+            let mut doc = PrettyTree::Nil;
+            let mut remaining = adjust;
+            while remaining != 0 {
+                let i = SPACES.len().min(remaining);
+                remaining -= i;
+                doc = doc.append(PrettyTree::text(&SPACES[..i]))
+            }
+            doc
+        };
+        spaces.append(self).hang(adjust.try_into().unwrap())
+    }
 }
 
-impl PrettyPrint for DocumentTree {
-    fn pretty(&self, _: &PrettyProvider) -> DocumentTree {
+impl PrettyPrint for PrettyTree {
+    fn pretty(&self, _: &PrettyProvider) -> PrettyTree {
         self.clone()
     }
 }
 
-impl DocumentTree {
+impl PrettyTree {
     fn with_utf8_len(self) -> Self {
         let s = match &self {
             Self::Text(s) => s.as_ref(),
@@ -255,7 +313,7 @@ impl DocumentTree {
     #[inline]
     pub fn append<E>(self, follow: E) -> Self
     where
-        E: Into<DocumentTree>,
+        E: Into<PrettyTree>,
     {
         let rhs = follow.into();
         match (&self, &rhs) {
@@ -272,13 +330,13 @@ impl DocumentTree {
     /// NOTE: The separator type, `S` may need to be cloned. Consider using cheaply cloneable ptr
     /// like `RefDoc` or `RcDoc`
     #[inline]
-    pub fn join<I, T>(terms: I, joint: T) -> DocumentTree
+    pub fn join<I, T>(terms: I, joint: T) -> PrettyTree
     where
-        I: IntoIterator<Item = DocumentTree>,
-        T: Into<DocumentTree>,
+        I: IntoIterator<Item = PrettyTree>,
+        T: Into<PrettyTree>,
     {
         let joint = joint.into();
-        let mut out = DocumentTree::Nil;
+        let mut out = PrettyTree::Nil;
         for term in terms.into_iter() {
             out = out.append(joint.clone()).append(term);
         }
@@ -287,7 +345,7 @@ impl DocumentTree {
     pub fn concat<I>(docs: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<DocumentTree>,
+        I::Item: Into<PrettyTree>,
     {
         let mut head = Self::Nil;
         for item in docs.into_iter() {
@@ -333,7 +391,7 @@ impl DocumentTree {
     #[inline]
     pub fn union<E>(self, other: E) -> Self
     where
-        E: Into<DocumentTree>,
+        E: Into<PrettyTree>,
     {
         Self::Union { left: Rc::new(self), right: Rc::new(other.into()) }
     }
@@ -359,15 +417,12 @@ impl DocumentTree {
     /// ```
     #[inline]
     pub fn align(self) -> Self {
-        todo!()
-        // Self::Column {
-        //     column: move |col| {
-        //         let self_ = self.clone();
-        //         Self::Nesting {
-        //             nesting: move |nest| self_.clone().nest(col as isize - nest as isize),
-        //         }
-        //     },
-        // }
+        Self::Column {
+            column: Rc::new(move |col| {
+                let self_ = self.clone();
+                Self::Nesting { nesting: Rc::new(move |nest| self_.clone().nest(col as isize - nest as isize)) }
+            }),
+        }
     }
 
     /// Lays out `self` with a nesting level set to the current level plus `adjust`.
@@ -391,45 +446,6 @@ impl DocumentTree {
     #[inline]
     pub fn hang(self, adjust: isize) -> Self {
         self.nest(adjust).align()
-    }
-
-    /// Indents `self` by `adjust` spaces from the current cursor position
-    ///
-    /// NOTE: The doc pointer type, `D` may need to be cloned. Consider using cheaply cloneable ptr
-    /// like `RefDoc` or `RcDoc`
-    ///
-    /// ```rust
-    /// use pretty::DocAllocator;
-    ///
-    /// let arena = pretty::Arena::<()>::new();
-    /// let doc = arena
-    ///     .text("prefix")
-    ///     .append(arena.text(" "))
-    ///     .append(arena.reflow("The indent function indents these words!").indent(4));
-    /// assert_eq!(
-    ///     doc.1.pretty(24).to_string(),
-    ///     "
-    /// prefix     The indent
-    ///            function
-    ///            indents these
-    ///            words!"
-    ///         .trim_start(),
-    /// );
-    /// ```
-    #[inline]
-    pub fn indent(self, adjust: usize) -> Self {
-        let spaces = {
-            use crate::render::SPACES;
-            let mut doc = DocumentTree::Nil;
-            let mut remaining = adjust;
-            while remaining != 0 {
-                let i = SPACES.len().min(remaining);
-                remaining -= i;
-                doc = doc.append(DocumentTree::text(&SPACES[..i]))
-            }
-            doc
-        };
-        spaces.append(self).hang(adjust.try_into().unwrap())
     }
 
     /// Lays out `self` and provides the column width of it available to `f`

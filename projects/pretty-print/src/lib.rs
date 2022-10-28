@@ -20,7 +20,7 @@ pub use crate::render::{terminal::TerminalWriter, IoWrite};
 pub use crate::{
     providers::PrettyProvider,
     traits::{PrettyBuilder, PrettyPrint},
-    tree::DocumentTree,
+    tree::PrettyTree,
 };
 pub use color_ansi::*;
 

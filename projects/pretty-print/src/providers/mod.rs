@@ -1,4 +1,4 @@
-use crate::{DocumentTree, PrettyPrint};
+use crate::{PrettyPrint, PrettyTree};
 use alloc::{borrow::Cow, rc::Rc};
 use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Formatter};
@@ -45,104 +45,114 @@ impl PrettyProvider {
 
 impl PrettyProvider {
     /// Allocate a document containing the given text.
-    pub fn keyword<S>(&self, text: S) -> DocumentTree
+    pub fn keyword<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.keyword.clone())
+        PrettyTree::text(text).annotate(self.keyword.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn identifier<S>(&self, text: S) -> DocumentTree
+    pub fn identifier<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.operator.clone())
+        PrettyTree::text(text).annotate(self.operator.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn generic<S>(&self, text: S) -> DocumentTree
+    pub fn generic<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.macros.clone())
+        PrettyTree::text(text).annotate(self.macros.clone())
     }
 
     /// Allocate a document containing the given text.
-    pub fn variable<S>(&self, text: S, mutable: bool) -> DocumentTree
+    pub fn variable<S>(&self, text: S, mutable: bool) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
         if mutable {
-            DocumentTree::text(text).annotate(self.local_mut.clone())
+            PrettyTree::text(text).annotate(self.local_mut.clone())
         }
         else {
-            DocumentTree::text(text).annotate(self.local.clone())
+            PrettyTree::text(text).annotate(self.local.clone())
         }
     }
     /// Allocate a document containing the given text.
-    pub fn argument<S>(&self, text: S, mutable: bool) -> DocumentTree
+    pub fn argument<S>(&self, text: S, mutable: bool) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
         if mutable {
-            DocumentTree::text(text).annotate(self.argument_mut.clone())
+            PrettyTree::text(text).annotate(self.argument_mut.clone())
         }
         else {
-            DocumentTree::text(text).annotate(self.argument.clone())
+            PrettyTree::text(text).annotate(self.argument.clone())
         }
     }
     /// Allocate a document containing the given text.
-    pub fn operator<S>(&self, text: S) -> DocumentTree
+    pub fn operator<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.operator.clone())
+        PrettyTree::text(text).annotate(self.operator.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn string<S>(&self, text: S) -> DocumentTree
+    pub fn string<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.string.clone())
+        PrettyTree::text(text).annotate(self.string.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn annotation<S>(&self, text: S) -> DocumentTree
+    pub fn annotation<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.macros.clone())
+        PrettyTree::text(text).annotate(self.macros.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn number<S>(&self, text: S) -> DocumentTree
+    pub fn number<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.number.clone())
+        PrettyTree::text(text).annotate(self.number.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn structure<S>(&self, text: S) -> DocumentTree
+    pub fn structure<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.structure.clone())
+        PrettyTree::text(text).annotate(self.structure.clone())
     }
     /// Allocate a document containing the given text.
-    pub fn interface<S>(&self, text: S) -> DocumentTree
+    pub fn interface<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
     {
-        DocumentTree::text(text).annotate(self.interface.clone())
+        PrettyTree::text(text).annotate(self.interface.clone())
     }
 }
 
 impl PrettyProvider {
-    pub fn join<I, T>(&self, iter: &[I], joint: T) -> DocumentTree
+    pub fn join<I, T>(&self, iter: &[I], joint: T) -> PrettyTree
     where
         I: PrettyPrint,
         T: PrettyPrint,
     {
-        let mut out = DocumentTree::Nil;
+        let mut out = PrettyTree::Nil;
         for term in iter {
             out = out.append(term.pretty(self)).append(joint.pretty(self));
+        }
+        out
+    }
+    pub fn concat<T>(&self, iter: &[T]) -> PrettyTree
+    where
+        T: PrettyPrint,
+    {
+        let mut out = PrettyTree::Nil;
+        for term in iter {
+            out = out.append(term.pretty(self));
         }
         out
     }

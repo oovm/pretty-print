@@ -1,6 +1,6 @@
 use super::*;
 
-impl<T> Add<T> for DocumentTree
+impl<T> Add<T> for PrettyTree
 where
     T: Into<Self>,
 {
@@ -10,7 +10,7 @@ where
     }
 }
 
-impl<T> AddAssign<T> for DocumentTree
+impl<T> AddAssign<T> for PrettyTree
 where
     T: Into<Self>,
 {
@@ -19,7 +19,7 @@ where
     }
 }
 
-impl<T> From<Option<T>> for DocumentTree
+impl<T> From<Option<T>> for PrettyTree
 where
     Self: From<T>,
 {
@@ -31,19 +31,19 @@ where
     }
 }
 
-impl From<()> for DocumentTree {
+impl From<()> for PrettyTree {
     fn from(_: ()) -> Self {
         Self::Nil
     }
 }
 
-impl From<&'static str> for DocumentTree {
+impl From<&'static str> for PrettyTree {
     fn from(s: &'static str) -> Self {
         Self::StaticText(s)
     }
 }
 
-impl From<String> for DocumentTree {
+impl From<String> for PrettyTree {
     fn from(s: String) -> Self {
         Self::Text(Rc::from(s))
     }

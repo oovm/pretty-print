@@ -32,27 +32,27 @@ impl KAndRBracket {
         &self,
         items: &[I],
         allocator: &'a PrettyProvider,
-        inline_join: DocumentTree,
-        block_join: DocumentTree,
-    ) -> DocumentTree
+        inline_join: PrettyTree,
+        block_join: PrettyTree,
+    ) -> PrettyTree
     where
         I: PrettyPrint,
     {
-        let mut output = DocumentSequence::new(5);
+        let mut output = PrettySequence::new(5);
         if self.head_space {
             output.push(" ");
         }
         output.push(self.bracket_l);
         // inline
-        let mut inline = DocumentSequence::new(3);
+        let mut inline = PrettySequence::new(3);
         inline.push(" ");
         inline.push(allocator.join(items, inline_join));
         inline.push(" ");
         // block
-        let mut block = DocumentSequence::new(3);
-        block.push(DocumentTree::Hardline);
+        let mut block = PrettySequence::new(3);
+        block.push(PrettyTree::Hardline);
         block.push(allocator.join(items, block_join).indent(4));
-        block.push(DocumentTree::Hardline);
+        block.push(PrettyTree::Hardline);
         //
         output.push(block.flat_alt(inline));
         output.push(self.bracket_r);

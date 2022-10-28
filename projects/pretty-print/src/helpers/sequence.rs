@@ -2,49 +2,52 @@ use super::*;
 
 /// The document sequence type.
 #[derive(Clone, Debug, Default)]
-pub struct DocumentSequence {
-    items: Vec<DocumentTree>,
+pub struct PrettySequence {
+    items: Vec<PrettyTree>,
 }
 
-impl DocumentSequence {
+impl PrettySequence {
     pub fn new(capacity: usize) -> Self {
         Self { items: Vec::with_capacity(capacity) }
     }
     pub fn push<T>(&mut self, item: T)
     where
-        T: Into<DocumentTree>,
+        T: Into<PrettyTree>,
     {
         self.items.push(item.into());
     }
     pub fn extend<I, T>(&mut self, items: I)
     where
         I: IntoIterator<Item = T>,
-        T: Into<DocumentTree>,
+        T: Into<PrettyTree>,
     {
         self.items.extend(items.into_iter().map(|x| x.into()));
     }
 }
 
-impl PrettyBuilder for DocumentSequence {
-    fn flat_alt<E>(self, flat: E) -> DocumentTree
+impl PrettyBuilder for PrettySequence {
+    fn flat_alt<E>(self, flat: E) -> PrettyTree
     where
-        E: Into<DocumentTree>,
+        E: Into<PrettyTree>,
     {
-        DocumentTree::from(self).flat_alt(flat)
+        PrettyTree::from(self).flat_alt(flat)
+    }
+    fn indent(self, indent: usize) -> PrettyTree {
+        PrettyTree::from(self).indent(indent)
     }
 }
 
-impl<T> AddAssign<T> for DocumentSequence
+impl<T> AddAssign<T> for PrettySequence
 where
-    T: Into<DocumentTree>,
+    T: Into<PrettyTree>,
 {
     fn add_assign(&mut self, rhs: T) {
         self.push(rhs);
     }
 }
 
-impl From<DocumentSequence> for DocumentTree {
-    fn from(value: DocumentSequence) -> Self {
+impl From<PrettySequence> for PrettyTree {
+    fn from(value: PrettySequence) -> Self {
         Self::concat(value.items)
     }
 }

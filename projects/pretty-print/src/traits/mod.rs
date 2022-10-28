@@ -1,4 +1,4 @@
-use crate::{providers::PrettyProvider, DocumentTree};
+use crate::{providers::PrettyProvider, PrettyTree};
 use alloc::string::String;
 
 pub trait PrettyBuilder {
@@ -20,15 +20,16 @@ pub trait PrettyBuilder {
     /// assert_eq!(doc.1.pretty(100).to_string(), "let x in x");
     /// assert_eq!(doc.1.pretty(8).to_string(), "let x\nx");
     /// ```
-    fn flat_alt<E>(self, inline: E) -> DocumentTree
+    fn flat_alt<E>(self, inline: E) -> PrettyTree
     where
-        E: Into<DocumentTree>;
+        E: Into<PrettyTree>;
+    fn indent(self, indent: usize) -> PrettyTree;
 }
 
 /// Marker trait for types that can be pretty printed.
 pub trait PrettyPrint {
     /// Build a pretty tree for this type.
-    fn pretty(&self, allocator: &PrettyProvider) -> DocumentTree;
+    fn pretty(&self, theme: &PrettyProvider) -> PrettyTree;
     /// Get a pretty string for this type.
     fn pretty_string(&self, width: usize) -> String {
         let arena = PrettyProvider::new();
@@ -51,5 +52,11 @@ pub trait PrettyPrint {
                 eprintln!("Error: {}", e);
             }
         }
+    }
+}
+
+impl PrettyPrint for &'static str {
+    fn pretty(&self, _: &PrettyProvider) -> PrettyTree {
+        PrettyTree::StaticText(*self)
     }
 }
