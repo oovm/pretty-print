@@ -2,6 +2,7 @@ use crate::PrettyTree;
 use alloc::{rc::Rc, string::String, vec, vec::Vec};
 use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Display, Formatter};
+
 #[cfg(feature = "std")]
 pub mod terminal;
 
@@ -231,29 +232,29 @@ macro_rules! make_spaces {
 
 pub(crate) const SPACES: &str = make_spaces!(,,,,,,,,,,);
 
-fn append_docs2<'a>(ldoc: &'a PrettyTree, rdoc: &'a PrettyTree, mut consumer: impl FnMut(&'a PrettyTree)) -> &'a PrettyTree {
-    let d = append_docs(&rdoc, &mut consumer);
+fn append_docs2(ldoc: Rc<PrettyTree>, rdoc: Rc<PrettyTree>, mut consumer: impl FnMut(Rc<PrettyTree>)) -> Rc<PrettyTree> {
+    let d = append_docs(rdoc, &mut consumer);
     consumer(d);
-    append_docs(&ldoc, &mut consumer)
+    append_docs(ldoc, &mut consumer)
 }
 
-fn append_docs<'a>(mut doc: &'a PrettyTree, consumer: &mut impl FnMut(&'a PrettyTree)) -> &'a PrettyTree {
+fn append_docs(mut doc: Rc<PrettyTree>, consumer: &mut impl FnMut(Rc<PrettyTree>)) -> Rc<PrettyTree> {
     loop {
         // Since appended documents often appear in sequence on the left side we
         // gain a slight performance increase by batching these pushes (avoiding
         // to push and directly pop `Append` documents)
-        match doc {
+        match doc.as_ref() {
             PrettyTree::Append { lhs, rhs } => {
-                let d = append_docs(rhs, consumer);
+                let d = append_docs(rhs.clone(), consumer);
                 consumer(d);
-                doc = lhs;
+                doc = lhs.clone();
             }
             _ => return doc,
         }
     }
 }
 
-pub fn best<W>(doc: &PrettyTree, width: usize, out: &mut W) -> Result<(), W::Error>
+pub fn best<W>(doc: Rc<PrettyTree>, width: usize, out: &mut W) -> Result<(), W::Error>
 where
     W: RenderAnnotated,
     W: ?Sized,
@@ -276,10 +277,10 @@ enum Mode {
     Flat,
 }
 
-struct RenderCommand<'a> {
+struct RenderCommand {
     indent: usize,
     mode: Mode,
-    node: &'a PrettyTree,
+    node: Rc<PrettyTree>,
 }
 
 fn write_newline<W>(ind: usize, out: &mut W) -> Result<(), W::Error>
@@ -303,21 +304,21 @@ where
     Ok(())
 }
 
-struct Best<'a> {
+struct Best {
     pos: usize,
-    back_cmds: Vec<RenderCommand<'a>>,
-    front_cmds: Vec<&'a PrettyTree>,
+    back_cmds: Vec<RenderCommand>,
+    front_cmds: Vec<Rc<PrettyTree>>,
     annotation_levels: Vec<usize>,
     width: usize,
 }
 
-impl<'a> Best<'a> {
-    fn fitting(&mut self, next: &'a PrettyTree, mut pos: usize, ind: usize) -> bool {
+impl Best {
+    fn fitting(&mut self, next: Rc<PrettyTree>, mut pos: usize, ind: usize) -> bool {
         let mut bidx = self.back_cmds.len();
         self.front_cmds.clear(); // clear from previous calls from best
         self.front_cmds.push(next);
-
         let mut mode = Mode::Flat;
+
         loop {
             let mut doc = match self.front_cmds.pop() {
                 None => {
@@ -328,17 +329,17 @@ impl<'a> Best<'a> {
                     else {
                         bidx -= 1;
                         mode = Mode::Break;
-                        self.back_cmds[bidx].node
+                        self.back_cmds[bidx].node.clone()
                     }
                 }
                 Some(cmd) => cmd,
             };
 
             loop {
-                match doc {
+                match doc.as_ref() {
                     PrettyTree::Nil => {}
                     PrettyTree::Append { lhs: base, rhs: rest } => {
-                        doc = append_docs2(base, rest, |doc| self.front_cmds.push(doc));
+                        doc = append_docs2(base.clone(), rest.clone(), |doc| self.front_cmds.push(doc));
                         continue;
                     }
                     // Newlines inside the group makes it not fit, but those outside lets it
@@ -362,35 +363,27 @@ impl<'a> Best<'a> {
                             return false;
                         }
                     }
-                    // Doc::SmallText(ref str) => {
-                    //     pos += str.len();
-                    //     if pos > self.width {
-                    //         return false;
-                    //     }
-                    // }
                     PrettyTree::MaybeInline { block: flat, inline } => {
                         doc = match mode {
-                            Mode::Break => flat,
-                            Mode::Flat => inline,
+                            Mode::Break => flat.clone(),
+                            Mode::Flat => inline.clone(),
                         };
                         continue;
                     }
 
-                    PrettyTree::Column { column } => {
-                        todo!();
-                        // doc = column(pos);
-                        // continue;
+                    PrettyTree::Column { function } => {
+                        doc = Rc::new(function(pos));
+                        continue;
                     }
-                    PrettyTree::Nesting { nesting } => {
-                        todo!();
-                        // doc = &nesting(ind);
-                        // continue;
+                    PrettyTree::Nesting { function } => {
+                        doc = Rc::new(function(ind));
+                        continue;
                     }
                     PrettyTree::Nest { space: _, doc: next }
                     | PrettyTree::Group { items: next }
                     | PrettyTree::Annotated { color: _, doc: next }
                     | PrettyTree::Union { left: _, right: next } => {
-                        doc = next;
+                        doc = next.clone();
                         continue;
                     }
                     PrettyTree::Fail => return false,
@@ -411,23 +404,24 @@ impl<'a> Best<'a> {
             let mut cmd = self.back_cmds.pop().unwrap();
             loop {
                 let RenderCommand { indent: ind, mode, node: doc } = cmd;
-                match doc {
+                match doc.as_ref() {
                     PrettyTree::Nil => {}
                     PrettyTree::Append { lhs, rhs } => {
-                        cmd.node =
-                            append_docs2(lhs, rhs, |doc| self.back_cmds.push(RenderCommand { indent: ind, mode, node: doc }));
+                        cmd.node = append_docs2(lhs.clone(), rhs.clone(), |doc| {
+                            self.back_cmds.push(RenderCommand { indent: ind, mode, node: doc })
+                        });
                         continue;
                     }
                     PrettyTree::MaybeInline { block, inline } => {
                         cmd.node = match mode {
-                            Mode::Break => block,
-                            Mode::Flat => inline,
+                            Mode::Break => block.clone(),
+                            Mode::Flat => inline.clone(),
                         };
                         continue;
                     }
                     PrettyTree::Group { items } => {
                         if let Mode::Break = mode {
-                            if self.fitting(items, self.pos, ind) {
+                            if self.fitting(items.clone(), self.pos, ind) {
                                 cmd.mode = Mode::Flat;
                             }
                         }
@@ -443,7 +437,7 @@ impl<'a> Best<'a> {
                         else {
                             ind.saturating_sub(space.unsigned_abs())
                         };
-                        cmd = RenderCommand { indent: new_ind, mode, node: doc };
+                        cmd = RenderCommand { indent: new_ind, mode, node: doc.clone() };
                         continue;
                     }
                     PrettyTree::Hardline => {
@@ -472,11 +466,6 @@ impl<'a> Best<'a> {
                             self.pos += len;
                             fits &= self.pos <= self.width;
                         }
-                        // Doc::SmallText(ref s) => {
-                        //     out.write_str_all(s)?;
-                        //     self.pos += len;
-                        //     fits &= self.pos <= self.width;
-                        // }
                         _ => unreachable!(),
                     },
                     PrettyTree::Text(ref s) => {
@@ -492,7 +481,7 @@ impl<'a> Best<'a> {
                     PrettyTree::Annotated { color, doc } => {
                         out.push_annotation(color.clone())?;
                         self.annotation_levels.push(self.back_cmds.len());
-                        cmd.node = doc;
+                        cmd.node = doc.clone();
                         continue;
                     }
                     PrettyTree::Union { left, right } => {
@@ -500,7 +489,7 @@ impl<'a> Best<'a> {
                         let annotation_levels = self.annotation_levels.len();
                         let bcmds = self.back_cmds.len();
 
-                        self.back_cmds.push(RenderCommand { indent: ind, mode, node: left });
+                        self.back_cmds.push(RenderCommand { indent: ind, mode, node: left.clone() });
 
                         let mut buffer = BufferWrite::new();
 
@@ -510,20 +499,18 @@ impl<'a> Best<'a> {
                                 self.pos = pos;
                                 self.back_cmds.truncate(bcmds);
                                 self.annotation_levels.truncate(annotation_levels);
-                                cmd.node = right;
+                                cmd.node = right.clone();
                                 continue;
                             }
                         }
                     }
-                    PrettyTree::Column { column } => {
-                        todo!();
-                        // cmd.node = &column(self.pos);
-                        // continue;
+                    PrettyTree::Column { function: column } => {
+                        cmd.node = Rc::new(column(self.pos));
+                        continue;
                     }
-                    PrettyTree::Nesting { nesting } => {
-                        todo!();
-                        // cmd.node = &nesting(self.pos);
-                        // continue;
+                    PrettyTree::Nesting { function: nesting } => {
+                        cmd.node = Rc::new(nesting(self.pos));
+                        continue;
                     }
                     PrettyTree::Fail => return Err(out.fail_doc()),
                 }

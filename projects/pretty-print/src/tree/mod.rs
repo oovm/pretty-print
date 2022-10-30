@@ -56,10 +56,10 @@ pub enum PrettyTree {
         right: Rc<Self>,
     },
     Column {
-        column: Rc<dyn Fn(usize) -> Self>,
+        function: Rc<dyn Fn(usize) -> Self>,
     },
     Nesting {
-        nesting: Rc<dyn Fn(usize) -> Self>,
+        function: Rc<dyn Fn(usize) -> Self>,
     },
     /// Concatenates two documents with a line in between
     Fail,
@@ -79,8 +79,8 @@ impl Clone for PrettyTree {
             Self::Nest { space, doc } => Self::Nest { space: *space, doc: doc.clone() },
             Self::RenderLen { len, doc } => Self::RenderLen { len: *len, doc: doc.clone() },
             Self::Union { left, right } => Self::Union { left: left.clone(), right: right.clone() },
-            Self::Column { column } => Self::Column { column: column.clone() },
-            Self::Nesting { nesting } => Self::Nesting { nesting: nesting.clone() },
+            Self::Column { function: column } => Self::Column { function: column.clone() },
+            Self::Nesting { function: nesting } => Self::Nesting { function: nesting.clone() },
             Self::Fail => Self::Fail,
         }
     }
@@ -208,7 +208,7 @@ impl PrettyTree {
         W: RenderAnnotated,
         W: ?Sized,
     {
-        render::best(self, width, out)
+        render::best(Rc::new(self.clone()), width, out)
     }
 }
 
@@ -216,7 +216,7 @@ impl PrettyTree {
     #[inline]
     #[cfg(feature = "std")]
     pub fn render_colored<W: Write>(&self, width: usize, out: W) -> std::io::Result<()> {
-        render::best(self, width, &mut crate::TerminalWriter::new(out))
+        render::best(Rc::new(self.clone()), width, &mut crate::TerminalWriter::new(out))
     }
 }
 
@@ -418,9 +418,9 @@ impl PrettyTree {
     #[inline]
     pub fn align(self) -> Self {
         Self::Column {
-            column: Rc::new(move |col| {
+            function: Rc::new(move |col| {
                 let self_ = self.clone();
-                Self::Nesting { nesting: Rc::new(move |nest| self_.clone().nest(col as isize - nest as isize)) }
+                Self::Nesting { function: Rc::new(move |nest| self_.clone().nest(col as isize - nest as isize)) }
             }),
         }
     }

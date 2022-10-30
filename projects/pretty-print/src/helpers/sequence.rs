@@ -7,15 +7,18 @@ pub struct PrettySequence {
 }
 
 impl PrettySequence {
+    /// Create a new sequence with the given capacity.
     pub fn new(capacity: usize) -> Self {
         Self { items: Vec::with_capacity(capacity) }
     }
+    /// Create a new sequence with the given capacity.
     pub fn push<T>(&mut self, item: T)
     where
         T: Into<PrettyTree>,
     {
         self.items.push(item.into());
     }
+    /// Create a new sequence with the given capacity.
     pub fn extend<I, T>(&mut self, items: I)
     where
         I: IntoIterator<Item = T>,
