@@ -213,6 +213,7 @@ impl PrettyTree {
 }
 
 impl PrettyTree {
+    /// The given text, which must not contain line breaks.
     #[inline]
     #[cfg(feature = "std")]
     pub fn render_colored<W: Write>(&self, width: usize, out: W) -> std::io::Result<()> {
@@ -342,6 +343,7 @@ impl PrettyTree {
         }
         out
     }
+    /// Allocate a document that intersperses the given separator `S` between the given documents
     pub fn concat<I>(docs: I) -> Self
     where
         I: IntoIterator,
@@ -463,16 +465,16 @@ impl PrettyTree {
     /// assert_eq!(doc.1.pretty(80).to_string(), "prefix | <- column 7");
     /// ```
     #[inline]
-    pub fn width(self, f: impl Fn(isize) -> Self) -> Self {
-        todo!()
-        // let f = allocator.alloc_width_fn(f);
-        // allocator.column(move |start| {
-        //     let f = f.clone();
-        //
-        //     DocumentTree(allocator, this.clone())
-        //         .append(allocator.column(move |end| f(end as isize - start as isize)))
-        //         .into_doc()
-        // })
+    pub fn width<F>(self, f: F) -> Self
+    where
+        F: Fn(isize) -> Self + Clone + 'static,
+    {
+        Self::Column {
+            invoke: Rc::new(move |start| {
+                let f = f.clone();
+                self.clone() + Self::Column { invoke: Rc::new(move |end| f(end as isize - start as isize)) }
+            }),
+        }
     }
 
     /// Puts `self` between `before` and `after`

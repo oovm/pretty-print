@@ -46,12 +46,12 @@ impl KAndRBracket {
         // inline
         let mut inline = PrettySequence::new(3);
         inline.push(" ");
-        inline.push(allocator.join(items, inline_join));
+        inline.push(allocator.join(items.iter().map(|s| s.pretty(allocator)), inline_join));
         inline.push(" ");
         // block
         let mut block = PrettySequence::new(3);
         block.push(PrettyTree::Hardline);
-        block.push(allocator.join(items, block_join).indent(4));
+        block.push(allocator.join(items.iter().map(|s| s.pretty(allocator)), block_join).indent(4));
         block.push(PrettyTree::Hardline);
         //
         output.push(block.flat_alt(inline));

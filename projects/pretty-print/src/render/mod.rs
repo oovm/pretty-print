@@ -63,6 +63,7 @@ impl<W> Debug for IoWrite<W> {
 }
 
 impl<W> IoWrite<W> {
+    /// Creates a new terminal writer.
     pub fn new(upstream: W) -> IoWrite<W> {
         IoWrite { upstream }
     }
@@ -100,6 +101,7 @@ impl<W> Debug for FmtWrite<W> {
 }
 
 impl<W> FmtWrite<W> {
+    /// Create a new `FmtWrite` from something implementing `std::fmt::Write`
     pub fn new(upstream: W) -> FmtWrite<W> {
         FmtWrite { upstream }
     }
@@ -126,7 +128,9 @@ where
 
 /// Trait representing the operations necessary to write an annotated document.
 pub trait RenderAnnotated: Render {
+    /// Push an annotation onto the stack
     fn push_annotation(&mut self, annotation: Rc<AnsiStyle>) -> Result<(), Self::Error>;
+    /// Pop an annotation from the stack
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 

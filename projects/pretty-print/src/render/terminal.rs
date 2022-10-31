@@ -3,6 +3,7 @@ use alloc::rc::Rc;
 use color_ansi::{AnsiAbility, AnsiStyle, AnsiWriter};
 use core::fmt::{Debug, Formatter};
 use std::io::{Error, ErrorKind, Write};
+/// Represents a terminal writer.
 pub struct TerminalWriter<W> {
     color_stack: Vec<Rc<AnsiStyle>>,
     upstream: AnsiWriter<W>,
@@ -15,9 +16,11 @@ impl<W> Debug for TerminalWriter<W> {
 }
 
 impl<W: Write> TerminalWriter<W> {
+    /// Creates a new terminal writer.
     pub fn new(upstream: W) -> Self {
         TerminalWriter { color_stack: Vec::new(), upstream: AnsiWriter::new(upstream) }
     }
+    /// Creates a new terminal writer with a specific color.
     pub fn with_color(mut self, color: AnsiAbility) -> Self {
         self.upstream.set_ability(color);
         self
