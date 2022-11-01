@@ -1,9 +1,11 @@
-use crate::{PrettyPrint, PrettyTree};
+use crate::{helpers::PrettySequence, PrettyPrint, PrettyTree};
 use alloc::{borrow::Cow, rc::Rc};
 use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Formatter};
+
 /// Represents a pretty-printable tree provider.
 pub struct PrettyProvider {
+    width: usize,
     // arena: Arena<ColorSpec>,
     keyword: Rc<AnsiStyle>,
     string: Rc<AnsiStyle>,
@@ -26,8 +28,9 @@ impl<'a> Debug for PrettyProvider {
 
 impl PrettyProvider {
     /// Creates a new pretty-printable tree provider.
-    pub fn new() -> Self {
+    pub fn new(width: usize) -> Self {
         PrettyProvider {
+            width,
             keyword: AnsiStyle::rgb(197, 119, 207).into(),
             string: AnsiStyle::rgb(152, 195, 121).into(),
             number: AnsiStyle::rgb(206, 153, 100).into(),
@@ -44,6 +47,12 @@ impl PrettyProvider {
 }
 
 impl PrettyProvider {
+    pub fn get_width(&self) -> usize {
+        self.width
+    }
+    pub fn set_width(&mut self, width: usize) {
+        self.width = width;
+    }
     /// Allocate a document containing the given text.
     pub fn keyword<S>(&self, text: S) -> PrettyTree
     where
@@ -140,11 +149,14 @@ impl PrettyProvider {
         I: PrettyPrint,
         T: PrettyPrint,
     {
-        let mut out = PrettyTree::Nil;
-        for term in iter {
-            out = out.append(term.pretty(self)).append(joint.pretty(self));
+        let mut iters = iter.iter().map(|x| x.pretty(self));
+        let mut terms = PrettySequence::new(iter.len() * 2);
+        terms += iters.next().unwrap_or(PrettyTree::Nil);
+        for term in iters {
+            terms += joint.pretty(self);
+            terms += term;
         }
-        out
+        terms.into()
     }
     pub fn concat<T>(&self, iter: &[T]) -> PrettyTree
     where

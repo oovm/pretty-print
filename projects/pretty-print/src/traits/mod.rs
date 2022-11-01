@@ -32,25 +32,22 @@ pub trait PrettyPrint {
     fn pretty(&self, theme: &PrettyProvider) -> PrettyTree;
     /// Get a pretty string for this type.
     fn pretty_string(&self, width: usize) -> String {
-        let arena = PrettyProvider::new();
+        let arena = PrettyProvider::new(144);
         let mut buffer = String::new();
         if let Err(e) = self.pretty(&arena).render_fmt(width, &mut buffer) {
-            return alloc::format!("Error: {}", e);
+            panic!("Error: {}", e);
         }
         buffer
     }
     /// Print a pretty string for this type.
-    #[cfg(feature = "std")]
-    fn pretty_print(&self, width: usize) {
-        let arena = PrettyProvider::new();
-        let mut buffer = std::io::stdout().lock();
-        match self.pretty(&arena).render_colored(width, &mut buffer) {
-            Ok(_) => {
-                // println!("{}", unsafe { String::from_utf8_unchecked(buffer) });
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-            }
+    fn pretty_colorful(&self, theme: &PrettyProvider) -> String {
+        let mut buffer = vec![];
+        if let Err(e) = self.pretty(&theme).render_colored(theme.get_width(), &mut buffer) {
+            panic!("Error: {}", e);
+        }
+        match String::from_utf8(buffer) {
+            Ok(s) => s,
+            Err(e) => panic!("Error: {}", e),
         }
     }
 }

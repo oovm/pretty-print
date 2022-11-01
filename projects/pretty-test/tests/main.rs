@@ -12,8 +12,8 @@ fn box1() {
     let doc = PrettyTree::text("hello")
         .annotate(Rc::new(AnsiStyle::new(AnsiColor::Red)))
         .append(PrettyTree::Hardline)
-        .append("a")
-        .append(" ")
+        .append("the")
+        .append("∷")
         .append("world");
     let mut buffer = vec![];
     doc.render_colored(10, &mut buffer).unwrap();
@@ -23,7 +23,7 @@ fn box1() {
 
 #[test]
 fn box2() {
-    let doc = PrettyTree::concat(vec!["hello", " ", " ", "world"]).group().indent(4);
+    let doc = PrettyTree::join(vec!["hello", " ", " ", "world"], "∷").group();
     let mut buffer = vec![];
     doc.render_colored(10, &mut buffer).unwrap();
 

@@ -397,14 +397,15 @@ impl Best {
         }
     }
 
-    fn best<W>(&mut self, _: usize, out: &mut W) -> Result<bool, W::Error>
+    fn best<W>(&mut self, top: usize, out: &mut W) -> Result<bool, W::Error>
     where
         W: RenderAnnotated,
         W: ?Sized,
     {
         let mut fits = true;
 
-        while let Some(mut cmd) = self.back_cmds.pop() {
+        while top < self.back_cmds.len() {
+            let mut cmd = self.back_cmds.pop().unwrap();
             loop {
                 let RenderCommand { indent: ind, mode, node } = cmd;
                 match node.as_ref() {
