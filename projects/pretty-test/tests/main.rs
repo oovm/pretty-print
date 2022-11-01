@@ -32,14 +32,15 @@ fn box2() {
 
 #[test]
 fn box_doc_inference() {
-    let doc = PrettyTree::text("test").append(PrettyTree::line()).append(PrettyTree::text("test")).group();
+    let doc = PrettyTree::text("test").append(PrettyTree::line_or_space()).append(PrettyTree::text("test")).group();
 
     println!("{}", doc.pretty(10));
 }
 
 #[test]
 fn newline_in_text() {
-    let doc =
-        PrettyTree::text("test").append(PrettyTree::line().append(PrettyTree::text("\"test\n     test\"")).nest(4)).group();
+    let doc = PrettyTree::text("test")
+        .append(PrettyTree::line_or_space().append(PrettyTree::text("\"test\n     test\"")).nest(4))
+        .group();
     println!("{}", doc.pretty(10));
 }

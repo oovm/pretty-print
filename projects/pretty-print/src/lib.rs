@@ -19,7 +19,7 @@ pub use self::render::{FmtWrite, PrettyFormatter, Render, RenderAnnotated};
 pub use crate::render::{terminal::TerminalWriter, IoWrite};
 pub use crate::{
     providers::PrettyProvider,
-    traits::{PrettyBuilder, PrettyPrint},
+    traits::{printer::PrettyPrint, PrettyBuilder},
     tree::PrettyTree,
 };
 pub use color_ansi::*;

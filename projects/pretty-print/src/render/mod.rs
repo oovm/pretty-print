@@ -8,10 +8,13 @@ pub mod terminal;
 
 /// Trait representing the operations necessary to render a document
 pub trait Render {
+    /// The type of the output
     type Error;
 
+    /// Write a string to the output
     fn write_str(&mut self, s: &str) -> Result<usize, Self::Error>;
 
+    /// Write a character to the output
     fn write_str_all(&mut self, mut s: &str) -> Result<(), Self::Error> {
         while !s.is_empty() {
             let count = self.write_str(s)?;
@@ -20,6 +23,7 @@ pub trait Render {
         Ok(())
     }
 
+    /// Write a character to the output
     fn fail_doc(&self) -> Self::Error;
 }
 
@@ -349,7 +353,7 @@ impl Best {
                     // Newlines inside the group makes it not fit, but those outside lets it
                     // fit on the current line
                     PrettyTree::Hardline => return mode == Mode::Break,
-                    PrettyTree::RenderLen { len, doc: _ } => {
+                    PrettyTree::RenderLength { length: len, body: _ } => {
                         pos += len;
                         if pos > self.width {
                             return false;
@@ -375,18 +379,18 @@ impl Best {
                         continue;
                     }
 
-                    PrettyTree::Column { function } => {
+                    PrettyTree::Column { invoke: function } => {
                         doc = Rc::new(function(pos));
                         continue;
                     }
-                    PrettyTree::Nesting { function } => {
+                    PrettyTree::Nesting { invoke: function } => {
                         doc = Rc::new(function(ind));
                         continue;
                     }
                     PrettyTree::Nest { space: _, doc: next }
                     | PrettyTree::Group { items: next }
-                    | PrettyTree::Annotated { color: _, doc: next }
-                    | PrettyTree::Union { left: _, right: next } => {
+                    | PrettyTree::Annotated { style: _, body: next }
+                    | PrettyTree::Union { lhs: _, rhs: next } => {
                         doc = next.clone();
                         continue;
                     }
@@ -460,7 +464,7 @@ impl Best {
                             }
                         }
                     }
-                    PrettyTree::RenderLen { len, doc } => match doc.as_ref() {
+                    PrettyTree::RenderLength { length: len, body: doc } => match doc.as_ref() {
                         PrettyTree::Text(s) => {
                             out.write_str_all(s)?;
                             self.pos += len;
@@ -483,13 +487,13 @@ impl Best {
                         self.pos += s.len();
                         fits &= self.pos <= self.width;
                     }
-                    PrettyTree::Annotated { color, doc } => {
+                    PrettyTree::Annotated { style: color, body: doc } => {
                         out.push_annotation(color.clone())?;
                         self.annotation_levels.push(self.back_cmds.len());
                         cmd.node = doc.clone();
                         continue;
                     }
-                    PrettyTree::Union { left, right } => {
+                    PrettyTree::Union { lhs: left, rhs: right } => {
                         let pos = self.pos;
                         let annotation_levels = self.annotation_levels.len();
                         let bcmds = self.back_cmds.len();
@@ -509,11 +513,11 @@ impl Best {
                             }
                         }
                     }
-                    PrettyTree::Column { function: column } => {
+                    PrettyTree::Column { invoke: column } => {
                         cmd.node = Rc::new(column(self.pos));
                         continue;
                     }
-                    PrettyTree::Nesting { function: nesting } => {
+                    PrettyTree::Nesting { invoke: nesting } => {
                         cmd.node = Rc::new(nesting(self.pos));
                         continue;
                     }

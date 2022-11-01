@@ -1,4 +1,4 @@
-use crate::{helpers::PrettySequence, render, FmtWrite, PrettyBuilder, PrettyPrint, PrettyProvider, RenderAnnotated};
+use crate::{helpers::PrettySequence, render, FmtWrite, PrettyBuilder, RenderAnnotated};
 use alloc::{borrow::Cow, rc::Rc, string::String};
 use color_ansi::AnsiStyle;
 use core::{
@@ -21,46 +21,66 @@ pub enum PrettyTree {
     Nil,
     /// A hard line break
     Hardline,
+    /// A dynamic text document, all newlines are hard line breaks
     Text(Rc<str>),
-    /// Concatenates two documents
+    /// A static text document, all newlines are hard line breaks
     StaticText(&'static str),
+    /// A document with ansi styles
     Annotated {
-        color: Rc<AnsiStyle>,
-        doc: Rc<Self>,
+        /// The style to use for the text
+        style: Rc<AnsiStyle>,
+        /// The text to display
+        body: Rc<Self>,
     },
     /// Concatenates two documents
     Append {
+        /// The first document
         lhs: Rc<Self>,
+        /// The second document
         rhs: Rc<Self>,
     },
     /// Concatenates two documents with a space in between
     Group {
+        /// The first document
         items: Rc<Self>,
     },
     /// Concatenates two documents with a line in between
     MaybeInline {
+        /// The first document
         block: Rc<Self>,
+        /// The second document
         inline: Rc<Self>,
     },
     /// Concatenates two documents with a line in between
     Nest {
+        /// The first document
         space: isize,
+        /// The second document
         doc: Rc<Self>,
     },
-    // Stores the length of a string document that is not just ascii
-    RenderLen {
-        len: usize,
-        doc: Rc<Self>,
+    /// Stores the length of a string document that is not just ascii
+    RenderLength {
+        /// The length of the string
+        length: usize,
+        /// The document
+        body: Rc<Self>,
     },
+    /// Concatenates two documents with a line in between
     Union {
-        left: Rc<Self>,
-        right: Rc<Self>,
+        /// The first document
+        lhs: Rc<Self>,
+        /// The second document
+        rhs: Rc<Self>,
     },
+    /// Concatenates two documents with a line in between
     Column {
-        function: Rc<dyn Fn(usize) -> Self>,
+        /// The first document
+        invoke: Rc<dyn Fn(usize) -> Self>,
     },
+    /// Concatenates two documents with a line in between
     Nesting {
-        function: Rc<dyn Fn(usize) -> Self>,
+        /// The first document
+        invoke: Rc<dyn Fn(usize) -> Self>,
     },
     /// Concatenates two documents with a line in between
     Fail,
@@ -68,16 +88,16 @@ pub enum PrettyTree {
 
 #[allow(non_upper_case_globals)]
 impl PrettyTree {
+    /// A hard line break
     pub const Space: Self = PrettyTree::StaticText(" ");
     ///   A line acts like a  `\n`  but behaves like  `space`  if it is grouped on a single line.
     #[inline]
-    pub fn line() -> Self {
+    pub fn line_or_space() -> Self {
         Self::Hardline.flat_alt(Self::Space).into()
     }
-
     ///   Acts like  `line`  but behaves like  `nil`  if grouped on a single line
     #[inline]
-    pub fn line_() -> Self {
+    pub fn line_or_nil() -> Self {
         Self::Hardline.flat_alt(Self::Nil).into()
     }
 }
@@ -200,12 +220,6 @@ impl PrettyBuilder for PrettyTree {
     }
 }
 
-impl PrettyPrint for PrettyTree {
-    fn pretty(&self, _: &PrettyProvider) -> PrettyTree {
-        self.clone()
-    }
-}
-
 impl PrettyTree {
     fn with_utf8_len(self) -> Self {
         let s = match &self {
@@ -219,7 +233,7 @@ impl PrettyTree {
         }
         else {
             let grapheme_len = s.graphemes(true).count();
-            Self::RenderLen { len: grapheme_len, doc: Rc::new(self) }
+            Self::RenderLength { length: grapheme_len, body: Rc::new(self) }
         }
     }
 
@@ -304,7 +318,7 @@ impl PrettyTree {
     /// Mark this document as a comment.
     #[inline]
     pub fn annotate(self, style: Rc<AnsiStyle>) -> Self {
-        Self::Annotated { color: style, doc: Rc::new(self) }
+        Self::Annotated { style: style, body: Rc::new(self) }
     }
     /// Mark this document as a hard line break.
     #[inline]
@@ -312,7 +326,7 @@ impl PrettyTree {
     where
         E: Into<PrettyTree>,
     {
-        Self::Union { left: Rc::new(self), right: Rc::new(other.into()) }
+        Self::Union { lhs: Rc::new(self), rhs: Rc::new(other.into()) }
     }
 
     /// Lays out `self` so with the nesting level set to the current column
@@ -337,9 +351,9 @@ impl PrettyTree {
     #[inline]
     pub fn align(self) -> Self {
         Self::Column {
-            function: Rc::new(move |col| {
+            invoke: Rc::new(move |col| {
                 let self_ = self.clone();
-                Self::Nesting { function: Rc::new(move |nest| self_.clone().nest(col as isize - nest as isize)) }
+                Self::Nesting { invoke: Rc::new(move |nest| self_.clone().nest(col as isize - nest as isize)) }
             }),
         }
     }
