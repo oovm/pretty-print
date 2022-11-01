@@ -342,8 +342,8 @@ impl Best {
             loop {
                 match doc.as_ref() {
                     PrettyTree::Nil => {}
-                    PrettyTree::Append { lhs: base, rhs: rest } => {
-                        doc = append_docs2(base.clone(), rest.clone(), |doc| self.front_cmds.push(doc));
+                    PrettyTree::Append { lhs, rhs } => {
+                        doc = append_docs2(lhs.clone(), rhs.clone(), |send| self.front_cmds.push(send));
                         continue;
                     }
                     // Newlines inside the group makes it not fit, but those outside lets it
@@ -397,22 +397,21 @@ impl Best {
         }
     }
 
-    fn best<W>(&mut self, top: usize, out: &mut W) -> Result<bool, W::Error>
+    fn best<W>(&mut self, _: usize, out: &mut W) -> Result<bool, W::Error>
     where
         W: RenderAnnotated,
         W: ?Sized,
     {
         let mut fits = true;
 
-        while top < self.back_cmds.len() {
-            let mut cmd = self.back_cmds.pop().unwrap();
+        while let Some(mut cmd) = self.back_cmds.pop() {
             loop {
-                let RenderCommand { indent: ind, mode, node: doc } = cmd;
-                match doc.as_ref() {
+                let RenderCommand { indent: ind, mode, node } = cmd;
+                match node.as_ref() {
                     PrettyTree::Nil => {}
                     PrettyTree::Append { lhs, rhs } => {
-                        cmd.node = append_docs2(lhs.clone(), rhs.clone(), |doc| {
-                            self.back_cmds.push(RenderCommand { indent: ind, mode, node: doc })
+                        cmd.node = append_docs2(lhs.clone(), rhs.clone(), |send| {
+                            self.back_cmds.push(RenderCommand { indent: ind, mode, node: send })
                         });
                         continue;
                     }
@@ -424,12 +423,13 @@ impl Best {
                         continue;
                     }
                     PrettyTree::Group { items } => {
-                        if let Mode::Break = mode {
-                            if self.fitting(items.clone(), self.pos, ind) {
+                        match mode {
+                            Mode::Break if self.fitting(items.clone(), self.pos, ind) => {
                                 cmd.mode = Mode::Flat;
                             }
+                            _ => {}
                         }
-                        cmd.node = doc;
+                        cmd.node = items.clone();
                         continue;
                     }
                     PrettyTree::Nest { space, doc } => {
@@ -526,7 +526,6 @@ impl Best {
                 out.pop_annotation()?;
             }
         }
-
         Ok(fits)
     }
 }

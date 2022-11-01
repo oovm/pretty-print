@@ -1,5 +1,5 @@
 #![allow(dead_code, unused)]
-use pretty_print::{AnsiColor, AnsiStyle, PrettyTree};
+use pretty_print::{AnsiColor, AnsiStyle, PrettyBuilder, PrettyTree};
 use std::{io::stdout, rc::Rc};
 
 #[test]
@@ -23,8 +23,11 @@ fn box1() {
 
 #[test]
 fn box2() {
-    let doc = PrettyTree::concat(vec!["hello", " ", " ", "world"]).group();
-    println!("{}", doc.pretty(10));
+    let doc = PrettyTree::concat(vec!["hello", " ", " ", "world"]).group().indent(4);
+    let mut buffer = vec![];
+    doc.render_colored(10, &mut buffer).unwrap();
+
+    println!("{}", String::from_utf8_lossy(&buffer));
 }
 
 #[test]

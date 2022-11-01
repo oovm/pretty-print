@@ -11,6 +11,9 @@ license = "MPL-2.0"
 edition = "2021"
 exclude = ["package.json", "tests/**"]
 
+[dependencies]
+pretty = "0.12.1"
+
 [dependencies.pretty-print]
 version = "*"
 default-features = false
