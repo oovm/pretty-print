@@ -14,9 +14,12 @@ mod render;
 mod traits;
 mod tree;
 
-pub use self::render::{FmtWrite, PrettyFormatter, Render, RenderAnnotated};
+pub use self::render::{
+    write_fmt::{BufferWrite, FmtWrite},
+    PrettyFormatter, Render, RenderAnnotated,
+};
 #[cfg(feature = "std")]
-pub use crate::render::{terminal::TerminalWriter, IoWrite};
+pub use crate::render::write_io::{IoWrite, TerminalWriter};
 pub use crate::{
     providers::PrettyProvider,
     traits::{printer::PrettyPrint, PrettyBuilder},

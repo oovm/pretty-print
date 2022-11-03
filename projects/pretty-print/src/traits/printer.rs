@@ -5,10 +5,9 @@ pub trait PrettyPrint {
     /// Build a pretty tree for this type.
     fn pretty(&self, theme: &PrettyProvider) -> PrettyTree;
     /// Get a pretty string for this type.
-    fn pretty_string(&self, width: usize) -> String {
-        let arena = PrettyProvider::new(144);
+    fn pretty_string(&self, theme: &PrettyProvider) -> String {
         let mut buffer = String::new();
-        if let Err(e) = self.pretty(&arena).render_fmt(width, &mut buffer) {
+        if let Err(e) = self.pretty(&theme).render_fmt(theme.get_width(), &mut buffer) {
             panic!("Error: {}", e);
         }
         buffer

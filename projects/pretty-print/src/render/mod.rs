@@ -1,10 +1,12 @@
-use crate::PrettyTree;
-use alloc::{rc::Rc, string::String, vec, vec::Vec};
+use crate::{BufferWrite, PrettyTree};
+use alloc::{rc::Rc, vec, vec::Vec};
 use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Display, Formatter};
 
 #[cfg(feature = "std")]
-pub mod terminal;
+pub mod write_io;
+
+pub mod write_fmt;
 
 /// Trait representing the operations necessary to render a document
 pub trait Render {
@@ -55,81 +57,6 @@ impl PrettyTree {
     }
 }
 
-/// Writes to something implementing `std::io::Write`
-pub struct IoWrite<W> {
-    upstream: W,
-}
-
-impl<W> Debug for IoWrite<W> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("IoWrite").finish()
-    }
-}
-
-impl<W> IoWrite<W> {
-    /// Creates a new terminal writer.
-    pub fn new(upstream: W) -> IoWrite<W> {
-        IoWrite { upstream }
-    }
-}
-
-#[cfg(feature = "std")]
-impl<W> Render for IoWrite<W>
-where
-    W: std::io::Write,
-{
-    type Error = std::io::Error;
-
-    fn write_str(&mut self, s: &str) -> std::io::Result<usize> {
-        self.upstream.write(s.as_bytes())
-    }
-
-    fn write_str_all(&mut self, s: &str) -> std::io::Result<()> {
-        self.upstream.write_all(s.as_bytes())
-    }
-
-    fn fail_doc(&self) -> Self::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, "Document failed to render")
-    }
-}
-
-/// Writes to something implementing `std::fmt::Write`
-pub struct FmtWrite<W> {
-    upstream: W,
-}
-
-impl<W> Debug for FmtWrite<W> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("IoWrite").finish()
-    }
-}
-
-impl<W> FmtWrite<W> {
-    /// Create a new `FmtWrite` from something implementing `std::fmt::Write`
-    pub fn new(upstream: W) -> FmtWrite<W> {
-        FmtWrite { upstream }
-    }
-}
-
-impl<W> Render for FmtWrite<W>
-where
-    W: core::fmt::Write,
-{
-    type Error = core::fmt::Error;
-
-    fn write_str(&mut self, s: &str) -> Result<usize, core::fmt::Error> {
-        self.write_str_all(s).map(|_| s.len())
-    }
-
-    fn write_str_all(&mut self, s: &str) -> core::fmt::Result {
-        self.upstream.write_str(s)
-    }
-
-    fn fail_doc(&self) -> Self::Error {
-        core::fmt::Error
-    }
-}
-
 /// Trait representing the operations necessary to write an annotated document.
 pub trait RenderAnnotated: Render {
     /// Push an annotation onto the stack
@@ -138,99 +65,10 @@ pub trait RenderAnnotated: Render {
     fn pop_annotation(&mut self) -> Result<(), Self::Error>;
 }
 
-#[cfg(feature = "std")]
-impl<W> RenderAnnotated for IoWrite<W>
-where
-    W: std::io::Write,
-{
-    fn push_annotation(&mut self, _: Rc<AnsiStyle>) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    fn pop_annotation(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-impl<W> RenderAnnotated for FmtWrite<W>
-where
-    W: core::fmt::Write,
-{
-    fn push_annotation(&mut self, _: Rc<AnsiStyle>) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    fn pop_annotation(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
+#[derive(Debug)]
 enum Annotation<A> {
     Push(Rc<A>),
     Pop,
-}
-
-struct BufferWrite {
-    buffer: String,
-    annotations: Vec<(usize, Annotation<AnsiStyle>)>,
-}
-
-impl BufferWrite {
-    fn new() -> Self {
-        BufferWrite { buffer: String::new(), annotations: Vec::new() }
-    }
-
-    fn render<W>(&mut self, render: &mut W) -> Result<(), W::Error>
-    where
-        W: RenderAnnotated,
-        W: ?Sized,
-    {
-        let mut start = 0;
-        for (end, annotation) in &self.annotations {
-            let s = &self.buffer[start..*end];
-            if !s.is_empty() {
-                render.write_str_all(s)?;
-            }
-            start = *end;
-            match annotation {
-                Annotation::Push(a) => render.push_annotation(a.clone())?,
-                Annotation::Pop => render.pop_annotation()?,
-            }
-        }
-        let s = &self.buffer[start..];
-        if !s.is_empty() {
-            render.write_str_all(s)?;
-        }
-        Ok(())
-    }
-}
-
-impl Render for BufferWrite {
-    type Error = ();
-
-    fn write_str(&mut self, s: &str) -> Result<usize, Self::Error> {
-        self.buffer.push_str(s);
-        Ok(s.len())
-    }
-
-    fn write_str_all(&mut self, s: &str) -> Result<(), Self::Error> {
-        self.buffer.push_str(s);
-        Ok(())
-    }
-
-    fn fail_doc(&self) -> Self::Error {}
-}
-
-impl RenderAnnotated for BufferWrite {
-    fn push_annotation(&mut self, annotation: Rc<AnsiStyle>) -> Result<(), Self::Error> {
-        self.annotations.push((self.buffer.len(), Annotation::Push(annotation)));
-        Ok(())
-    }
-
-    fn pop_annotation(&mut self) -> Result<(), Self::Error> {
-        self.annotations.push((self.buffer.len(), Annotation::Pop));
-        Ok(())
-    }
 }
 
 macro_rules! make_spaces {
@@ -500,11 +338,11 @@ impl Best {
 
                         self.back_cmds.push(RenderCommand { indent: ind, mode, node: left.clone() });
 
-                        let mut buffer = BufferWrite::new();
+                        let mut buffer = BufferWrite::new(0);
 
                         match self.best(bcmds, &mut buffer) {
                             Ok(true) => buffer.render(out)?,
-                            Ok(false) | Err(()) => {
+                            Ok(false) | Err(_) => {
                                 self.pos = pos;
                                 self.back_cmds.truncate(bcmds);
                                 self.annotation_levels.truncate(annotation_levels);
