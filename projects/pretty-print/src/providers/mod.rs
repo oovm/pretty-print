@@ -1,4 +1,4 @@
-use crate::{helpers::PrettySequence, PrettyPrint, PrettyTree};
+use crate::{PrettyPrint, PrettyTree};
 use alloc::{borrow::Cow, rc::Rc};
 use color_ansi::AnsiStyle;
 use core::fmt::{Debug, Formatter};
@@ -6,7 +6,6 @@ use core::fmt::{Debug, Formatter};
 /// Represents a pretty-printable tree provider.
 pub struct PrettyProvider {
     width: usize,
-    // arena: Arena<ColorSpec>,
     keyword: Rc<AnsiStyle>,
     string: Rc<AnsiStyle>,
     number: Rc<AnsiStyle>,
@@ -17,10 +16,11 @@ pub struct PrettyProvider {
     local_mut: Rc<AnsiStyle>,
     operator: Rc<AnsiStyle>,
     structure: Rc<AnsiStyle>,
+    variant: Rc<AnsiStyle>,
     interface: Rc<AnsiStyle>,
 }
 
-impl<'a> Debug for PrettyProvider {
+impl Debug for PrettyProvider {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PrettyProvider").finish()
     }
@@ -29,7 +29,7 @@ impl<'a> Debug for PrettyProvider {
 impl PrettyProvider {
     /// Creates a new pretty-printable tree provider.
     pub fn new(width: usize) -> Self {
-        PrettyProvider {
+        Self {
             width,
             keyword: AnsiStyle::rgb(197, 119, 207).into(),
             string: AnsiStyle::rgb(152, 195, 121).into(),
@@ -41,17 +41,34 @@ impl PrettyProvider {
             local_mut: AnsiStyle::rgb(152, 195, 121).with_underline().into(),
             operator: AnsiStyle::rgb(90, 173, 238).into(),
             structure: AnsiStyle::rgb(197, 119, 207).into(),
+            variant: AnsiStyle::rgb(239, 112, 117).into(),
             interface: AnsiStyle::rgb(197, 119, 207).into(),
         }
     }
 }
 
 impl PrettyProvider {
+    /// Gets the width of the document.
     pub fn get_width(&self) -> usize {
         self.width
     }
+    /// Sets the width of the document.
     pub fn set_width(&mut self, width: usize) {
         self.width = width;
+    }
+    /// Gets the width of the document.
+    pub fn text<S>(&self, text: S) -> PrettyTree
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        PrettyTree::text(text)
+    }
+    /// Gets the width of the document.
+    pub fn custom<S>(&self, text: S, style: Rc<AnsiStyle>) -> PrettyTree
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        PrettyTree::text(text).annotate(style)
     }
     /// Allocate a document containing the given text.
     pub fn keyword<S>(&self, text: S) -> PrettyTree
@@ -135,6 +152,14 @@ impl PrettyProvider {
         PrettyTree::text(text).annotate(self.structure.clone())
     }
     /// Allocate a document containing the given text.
+    pub fn variant<S>(&self, text: S) -> PrettyTree
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        PrettyTree::text(text).annotate(self.variant.clone())
+    }
+
+    /// Allocate a document containing the given text.
     pub fn interface<S>(&self, text: S) -> PrettyTree
     where
         S: Into<Cow<'static, str>>,
@@ -144,28 +169,68 @@ impl PrettyProvider {
 }
 
 impl PrettyProvider {
-    pub fn join<I, T>(&self, iter: &[I], joint: T) -> PrettyTree
+    /// Allocate a document containing the given text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pretty_print::PrettyProvider;
+    /// let theme = PrettyProvider::new(80);
+    /// theme.join(vec!["a", "b", "c"], ", ");
+    /// ```
+    pub fn join<I, T1, T2>(&self, iter: I, joint: T2) -> PrettyTree
+    where
+        I: IntoIterator<Item = T1>,
+        T1: PrettyPrint,
+        T2: PrettyPrint,
+    {
+        PrettyTree::join(iter.into_iter().map(|x| x.pretty(self)), joint.pretty(self))
+    }
+    /// Allocate a document containing the given text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pretty_print::PrettyProvider;
+    /// let theme = PrettyProvider::new(80);
+    /// theme.join(&["a", "b", "c"], ", ");
+    /// ```
+    pub fn join_slice<I, T>(&self, iter: &[I], joint: T) -> PrettyTree
     where
         I: PrettyPrint,
         T: PrettyPrint,
     {
-        let mut iters = iter.iter().map(|x| x.pretty(self));
-        let mut terms = PrettySequence::new(iter.len() * 2);
-        terms += iters.next().unwrap_or(PrettyTree::Nil);
-        for term in iters {
-            terms += joint.pretty(self);
-            terms += term;
-        }
-        terms.into()
+        PrettyTree::join(iter.iter().map(|s| s.pretty(self)), joint.pretty(self))
     }
-    pub fn concat<T>(&self, iter: &[T]) -> PrettyTree
+    /// Allocate a document containing the given text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pretty_print::PrettyProvider;
+    /// let theme = PrettyProvider::new(80);
+    /// theme.concat(vec!["1", "2", "3"]);
+    /// ```
+    pub fn concat<I, T>(&self, iter: I) -> PrettyTree
+    where
+        I: IntoIterator<Item = T>,
+        T: PrettyPrint,
+    {
+        PrettyTree::concat(iter.into_iter().map(|x| x.pretty(self)))
+    }
+    /// Allocate a document containing the given text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use pretty_print::PrettyProvider;
+    /// let theme = PrettyProvider::new(80);
+    /// theme.concat_slice(&["1", "2", "3"]);
+    /// ```
+    pub fn concat_slice<T>(&self, iter: &[T]) -> PrettyTree
     where
         T: PrettyPrint,
     {
-        let mut out = PrettyTree::Nil;
-        for term in iter {
-            out = out.append(term.pretty(self));
-        }
-        out
+        PrettyTree::concat(iter.iter().map(|s| s.pretty(self)))
     }
 }

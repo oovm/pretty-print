@@ -95,6 +95,11 @@ impl PrettyTree {
     pub fn line_or_space() -> Self {
         Self::Hardline.flat_alt(Self::Space).into()
     }
+    ///  A line acts like  `\n`  but behaves like  `nil`  if it is grouped on a single line.
+    #[inline]
+    pub fn line_or_comma() -> Self {
+        Self::Hardline.flat_alt(PrettyTree::StaticText(", ")).into()
+    }
     ///   Acts like  `line`  but behaves like  `nil`  if grouped on a single line
     #[inline]
     pub fn line_or_nil() -> Self {
@@ -218,6 +223,18 @@ impl PrettyBuilder for PrettyTree {
         };
         spaces.append(self).hang(adjust.try_into().unwrap())
     }
+
+    /// Increase the indentation level of this document.
+    #[inline]
+    fn nest(self, offset: isize) -> Self {
+        if let Self::Nil = self {
+            return self;
+        }
+        if offset == 0 {
+            return self;
+        }
+        Self::Nest { space: offset, doc: Rc::new(self) }
+    }
 }
 
 impl PrettyTree {
@@ -301,20 +318,6 @@ impl PrettyTree {
         }
     }
 
-    /// Increase the indentation level of this document.
-    #[inline]
-    pub fn nest(self, offset: isize) -> Self {
-        match self {
-            Self::Nil => {
-                return self;
-            }
-            _ => {}
-        }
-        if offset == 0 {
-            return self;
-        }
-        Self::Nest { space: offset, doc: Rc::new(self) }
-    }
     /// Mark this document as a comment.
     #[inline]
     pub fn annotate(self, style: Rc<AnsiStyle>) -> Self {

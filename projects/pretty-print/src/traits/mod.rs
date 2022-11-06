@@ -3,6 +3,7 @@ use alloc::string::String;
 
 pub mod printer;
 
+/// The `PrettyPrint` trait is implemented by types that can be pretty-printed.
 pub trait PrettyBuilder {
     /// Acts as `self` when laid out on multiple lines and acts as `that` when laid out on a single line.
     ///
@@ -25,5 +26,9 @@ pub trait PrettyBuilder {
     fn flat_alt<E>(self, inline: E) -> PrettyTree
     where
         E: Into<PrettyTree>;
+    /// Acts as `self` when laid out on a single line and acts as `that` when laid out on multiple lines.
     fn indent(self, indent: usize) -> PrettyTree;
+
+    /// Increase the indentation level of this document.
+    fn nest(self, offset: isize) -> PrettyTree;
 }

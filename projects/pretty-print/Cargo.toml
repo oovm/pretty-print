@@ -1,6 +1,6 @@
 [package]
 name = "pretty-print"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Aster <192607617@qq.com>"]
 description = "pretty print tree"
 repository = "https://github.com/oovm/pretty-print"
@@ -15,7 +15,6 @@ unicode-segmentation = "1.10.1"
 [dependencies.color-ansi]
 version = "0.1.0"
 #default-features = false
-#features = ["termcolor"]
 #path = 'C:\Users\Dell\CLionProjects\color-rs\projects\color-ansi'
 
 [dev-dependencies]

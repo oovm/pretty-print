@@ -38,6 +38,10 @@ impl PrettyBuilder for PrettySequence {
     fn indent(self, indent: usize) -> PrettyTree {
         PrettyTree::from(self).indent(indent)
     }
+
+    fn nest(self, offset: isize) -> PrettyTree {
+        PrettyTree::from(self).nest(offset)
+    }
 }
 
 impl<T> AddAssign<T> for PrettySequence
