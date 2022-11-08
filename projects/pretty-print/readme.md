@@ -23,13 +23,12 @@ A _simple symbolic expression_ consists of a numeric _atom_ or a nested ordered 
 symbolic expression children.
 
 ```rust
-# use pretty::*;
+use pretty_print::*;
+use SExp::*;
 enum SExp {
     Atom(u32),
     List(Vec<SExp>),
 }
-use SExp::*;
-# fn main() { }
 ```
 
 We define a simple conversion to a [Doc](enum.Doc.html).  Atoms are rendered as strings; lists
@@ -37,48 +36,42 @@ are recursively rendered, with spaces between children where appropriate.  Child
 [nested]() and [grouped](), allowing them to be laid out in a single line as appropriate.
 
 ```rust
-# use pretty::*;
+# use pretty_print::*;
+# use SExp::*;
 # enum SExp {
 #     Atom(u32),
 #     List(Vec<SExp>),
 # }
-# use SExp::*;
 impl SExp {
     /// Return a pretty printed format of self.
-    pub fn to_doc(&self) -> RcDoc<()> {
-        match *self {
-            Atom(ref x) => RcDoc::as_string(x),
-            List(ref xs) =>
-                RcDoc::text("(")
-                    .append(RcDoc::intersperse(xs.into_iter().map(|x| x.to_doc()), Doc::line()).nest(1).group())
-                    .append(RcDoc::text(")"))
+    pub fn to_doc(&self) -> PrettyTree {
+        match self {
+            Atom(x) => PrettyTree::text(x.to_string()),
+            List(xs) => PrettyTree::text("(")
+                .append(PrettyTree::join(xs.into_iter().map(|x| x.to_doc()), PrettyTree::line_or_space()).nest(1).group())
+                .append(PrettyTree::text(")")),
         }
     }
 }
-# fn main() { }
+
 ```
 
 Next, we convert the [Doc](enum.Doc.html) to a plain old string.
 
 ```rust
-# use pretty::*;
+# use pretty_print::*;
+# use SExp::*;
 # enum SExp {
 #     Atom(u32),
 #     List(Vec<SExp>),
 # }
-# use SExp::*;
 # impl SExp {
 #     /// Return a pretty printed format of self.
-#     pub fn to_doc(&self) -> BoxDoc<()> {
-#         match *self {
-#             Atom(ref x) => BoxDoc::as_string(x),
-#             List(ref xs) =>
-#                 BoxDoc::text("(")
-#                     .append(BoxDoc::intersperse(xs.into_iter().map(|x| x.to_doc()), Doc::line()).nest(1).group())
-#                     .append(BoxDoc::text(")"))
-#         }
-#     }
+#     pub fn to_doc(&self) -> PrettyTree {
+#         todo!()
+#    }
 # }
+
 impl SExp {
     pub fn to_pretty(&self, width: usize) -> String {
         let mut w = Vec::new();
@@ -86,13 +79,12 @@ impl SExp {
         String::from_utf8(w).unwrap()
     }
 }
-# fn main() { }
 ```
 
 And finally we can test that the nesting and grouping behaves as we expected.
 
 ```rust
-# use pretty::*;
+# use pretty_print::*;
 # enum SExp {
 #     Atom(u32),
 #     List(Vec<SExp>),
